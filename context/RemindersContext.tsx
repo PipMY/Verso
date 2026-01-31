@@ -76,8 +76,41 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         setIsCloudEnabled(true);
         console.log("Cloud sync enabled for user:", user.id);
 
-        // Initial sync from cloud
-        await syncFromCloud();
+        // Initial sync from cloud - fetch and merge
+        const cloudReminders = await Supabase.fetchRemindersFromCloud();
+        console.log("Fetched", cloudReminders.length, "reminders from cloud");
+
+        if (cloudReminders.length > 0) {
+          setReminders((prev) => {
+            const mergedMap = new Map<string, Reminder>();
+
+            // Add local reminders first
+            for (const r of prev) {
+              mergedMap.set(r.syncId || r.id, r);
+            }
+
+            // Merge cloud reminders (cloud wins on conflict)
+            for (const cloudReminder of cloudReminders) {
+              const key = cloudReminder.syncId || cloudReminder.id;
+              const local = mergedMap.get(key);
+
+              if (
+                !local ||
+                new Date(cloudReminder.updatedAt) > new Date(local.updatedAt)
+              ) {
+                mergedMap.set(key, cloudReminder);
+              }
+            }
+
+            const merged = Array.from(mergedMap.values());
+            console.log("Merged to", merged.length, "total reminders");
+
+            // Save merged data to local storage
+            Storage.saveReminders(merged);
+
+            return merged;
+          });
+        }
 
         // Subscribe to real-time changes
         Supabase.subscribeToReminders(
@@ -92,25 +125,45 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   };
 
   const handleRemoteInsert = useCallback((reminder: Reminder) => {
+    console.log("Remote insert received:", reminder.title);
     setReminders((prev) => {
-      // Check if we already have this reminder (by syncId)
-      if (prev.some((r) => r.syncId === reminder.syncId)) {
+      // Check if we already have this reminder (by syncId or id)
+      if (
+        prev.some((r) => r.syncId === reminder.syncId || r.id === reminder.id)
+      ) {
+        console.log("Reminder already exists locally, skipping");
         return prev;
       }
-      return [...prev, reminder];
+      console.log("Adding remote reminder to local state");
+      // Also save to local storage
+      const updated = [...prev, reminder];
+      Storage.saveReminders(updated);
+      return updated;
     });
   }, []);
 
   const handleRemoteUpdate = useCallback((reminder: Reminder) => {
-    setReminders((prev) =>
-      prev.map((r) =>
-        r.syncId === reminder.syncId ? { ...r, ...reminder } : r,
-      ),
-    );
+    console.log("Remote update received:", reminder.title);
+    setReminders((prev) => {
+      const updated = prev.map((r) =>
+        r.syncId === reminder.syncId || r.id === reminder.id
+          ? { ...r, ...reminder }
+          : r,
+      );
+      Storage.saveReminders(updated);
+      return updated;
+    });
   }, []);
 
   const handleRemoteDelete = useCallback((syncId: string) => {
-    setReminders((prev) => prev.filter((r) => r.syncId !== syncId));
+    console.log("Remote delete received:", syncId);
+    setReminders((prev) => {
+      const updated = prev.filter(
+        (r) => r.syncId !== syncId && r.id !== syncId,
+      );
+      Storage.saveReminders(updated);
+      return updated;
+    });
   }, []);
 
   const syncFromCloud = async () => {
@@ -377,15 +430,27 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   );
 
   // Computed filtered lists
-  const activeReminders = reminders.filter((r) => !r.isCompleted);
+  const activeReminders = reminders.filter((r) => !r.isCompleted && r.datetime);
   const now = new Date();
   const todayStart = startOfDay(now);
   const tomorrowStart = startOfDay(addDays(now, 1));
 
+  // Debug: log reminder counts
+  console.log(
+    "Total reminders:",
+    reminders.length,
+    "Active with datetime:",
+    activeReminders.length,
+  );
+
   const todayReminders = activeReminders
     .filter((r) => {
-      const date = parseISO(r.snoozedUntil || r.datetime);
-      return isToday(date);
+      try {
+        const date = parseISO(r.snoozedUntil || r.datetime);
+        return isToday(date);
+      } catch {
+        return false;
+      }
     })
     .sort(
       (a, b) =>
@@ -395,8 +460,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
   const upcomingReminders = activeReminders
     .filter((r) => {
-      const date = parseISO(r.snoozedUntil || r.datetime);
-      return date >= tomorrowStart;
+      try {
+        const date = parseISO(r.snoozedUntil || r.datetime);
+        return date >= tomorrowStart;
+      } catch {
+        return false;
+      }
     })
     .sort(
       (a, b) =>
@@ -406,8 +475,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
   const overdueReminders = activeReminders
     .filter((r) => {
-      const date = parseISO(r.snoozedUntil || r.datetime);
-      return date < todayStart;
+      try {
+        const date = parseISO(r.snoozedUntil || r.datetime);
+        return date < todayStart;
+      } catch {
+        return false;
+      }
     })
     .sort(
       (a, b) =>
