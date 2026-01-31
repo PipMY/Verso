@@ -1,9 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 import { Platform } from "react-native";
 
 import { HapticTab } from "@/components/haptic-tab";
-import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Brand, Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
@@ -19,12 +19,13 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.backgroundSecondary,
           borderTopColor: colors.separator,
-          height: Platform.OS === "android" ? 60 : undefined,
-          paddingBottom: Platform.OS === "android" ? 8 : undefined,
+          height: Platform.OS === "ios" ? 85 : 65,
+          paddingBottom: Platform.OS === "ios" ? 25 : 10,
+          paddingTop: 8,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: "500",
+          fontWeight: "600",
         },
         headerShown: false,
         tabBarButton: HapticTab,
@@ -34,8 +35,12 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Reminders",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="bell.fill" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "notifications" : "notifications-outline"}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
@@ -43,8 +48,12 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: "Upcoming",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="calendar" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "calendar" : "calendar-outline"}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
