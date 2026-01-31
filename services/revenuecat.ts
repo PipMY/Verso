@@ -1,15 +1,15 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import Purchases, {
-    CustomerInfo,
-    LOG_LEVEL,
-    PurchasesPackage,
+  CustomerInfo,
+  LOG_LEVEL,
+  PurchasesPackage,
 } from "react-native-purchases";
 
 // Replace these with your actual RevenueCat API keys
 const API_KEYS = {
-  ios: "appl_YOUR_IOS_API_KEY",
-  android: "goog_YOUR_ANDROID_API_KEY",
+  ios: "test_mqFVmMFiTnlObipFTNbincfOHmD",
+  android: "test_mqFVmMFiTnlObipFTNbincfOHmD",
 };
 
 export interface SubscriptionStatus {
