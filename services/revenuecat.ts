@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import Purchases, {
     CustomerInfo,
@@ -17,8 +18,24 @@ export interface SubscriptionStatus {
   expirationDate?: Date;
 }
 
+// Check if running in Expo Go
+function isExpoGo(): boolean {
+  return Constants.appOwnership === "expo";
+}
+
+// Track if RevenueCat was successfully initialized
+let revenueCatInitialized = false;
+
 // Initialize RevenueCat
 export async function initializeRevenueCat(): Promise<void> {
+  // Skip RevenueCat initialization in Expo Go - it doesn't support native purchases
+  if (isExpoGo()) {
+    console.log(
+      "Running in Expo Go - RevenueCat features disabled. Use a development build for full functionality.",
+    );
+    return;
+  }
+
   try {
     Purchases.setLogLevel(LOG_LEVEL.DEBUG);
 
@@ -26,6 +43,7 @@ export async function initializeRevenueCat(): Promise<void> {
 
     await Purchases.configure({ apiKey });
 
+    revenueCatInitialized = true;
     console.log("RevenueCat initialized successfully");
   } catch (error) {
     console.error("Error initializing RevenueCat:", error);
@@ -34,6 +52,11 @@ export async function initializeRevenueCat(): Promise<void> {
 
 // Get available packages/offerings
 export async function getOfferings(): Promise<PurchasesPackage[]> {
+  if (!revenueCatInitialized) {
+    console.log("RevenueCat not initialized - returning empty offerings");
+    return [];
+  }
+
   try {
     const offerings = await Purchases.getOfferings();
 
@@ -52,6 +75,11 @@ export async function getOfferings(): Promise<PurchasesPackage[]> {
 export async function purchasePackage(
   pkg: PurchasesPackage,
 ): Promise<CustomerInfo | null> {
+  if (!revenueCatInitialized) {
+    console.log("RevenueCat not initialized - cannot purchase");
+    return null;
+  }
+
   try {
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return customerInfo;
@@ -67,6 +95,11 @@ export async function purchasePackage(
 
 // Restore purchases
 export async function restorePurchases(): Promise<CustomerInfo | null> {
+  if (!revenueCatInitialized) {
+    console.log("RevenueCat not initialized - cannot restore purchases");
+    return null;
+  }
+
   try {
     const customerInfo = await Purchases.restorePurchases();
     return customerInfo;
@@ -78,6 +111,11 @@ export async function restorePurchases(): Promise<CustomerInfo | null> {
 
 // Get current subscription status
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
+  if (!revenueCatInitialized) {
+    // In Expo Go, return free user status
+    return { isProUser: false };
+  }
+
   try {
     const customerInfo = await Purchases.getCustomerInfo();
 
@@ -109,6 +147,10 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
 
 // Set user ID for attribution
 export async function setUserId(userId: string): Promise<void> {
+  if (!revenueCatInitialized) {
+    return;
+  }
+
   try {
     await Purchases.logIn(userId);
   } catch (error) {
@@ -120,6 +162,10 @@ export async function setUserId(userId: string): Promise<void> {
 export function addCustomerInfoListener(
   callback: (customerInfo: CustomerInfo) => void,
 ): () => void {
+  if (!revenueCatInitialized) {
+    return () => {};
+  }
+
   Purchases.addCustomerInfoUpdateListener(callback);
   // RevenueCat SDK handles listener cleanup internally
   return () => {};

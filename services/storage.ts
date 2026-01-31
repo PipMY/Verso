@@ -6,7 +6,12 @@ import {
     UserPreferences,
 } from "@/types/reminder";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { v4 as uuidv4 } from "uuid";
+import * as Crypto from "expo-crypto";
+
+// Generate UUID using expo-crypto (React Native compatible)
+function generateUUID(): string {
+  return Crypto.randomUUID();
+}
 
 const STORAGE_KEYS = {
   REMINDERS: "verso_reminders",
@@ -20,7 +25,7 @@ const STORAGE_KEYS = {
 export async function getDeviceId(): Promise<string> {
   let deviceId = await AsyncStorage.getItem(STORAGE_KEYS.DEVICE_ID);
   if (!deviceId) {
-    deviceId = uuidv4();
+    deviceId = generateUUID();
     await AsyncStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
   }
   return deviceId;
@@ -58,8 +63,8 @@ export async function addReminder(
 
   const newReminder: Reminder = {
     ...reminder,
-    id: uuidv4(),
-    syncId: uuidv4(),
+    id: generateUUID(),
+    syncId: generateUUID(),
     deviceId,
     createdAt: now,
     updatedAt: now,

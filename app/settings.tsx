@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
     Alert,
-    Linking,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -271,14 +271,18 @@ export default function SettingsScreen() {
           icon="document-text-outline"
           iconColor={colors.textMuted}
           title="Privacy Policy"
-          onPress={() => Linking.openURL("https://example.com/privacy")}
+          onPress={() =>
+            WebBrowser.openBrowserAsync("https://sambeckman.com/privacy")
+          }
         />
 
         <SettingRow
           icon="shield-checkmark-outline"
           iconColor={colors.textMuted}
           title="Terms of Service"
-          onPress={() => Linking.openURL("https://example.com/terms")}
+          onPress={() =>
+            WebBrowser.openBrowserAsync("https://sambeckman.com/terms")
+          }
         />
       </View>
 
