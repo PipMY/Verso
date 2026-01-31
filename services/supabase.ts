@@ -340,6 +340,7 @@ export async function deleteReminderFromCloud(
 }
 
 // Sync all local reminders to cloud
+// Only syncs reminders that don't have a syncId (new) or were created by current user
 export async function syncRemindersToCloud(
   reminders: Reminder[],
 ): Promise<boolean> {
@@ -349,7 +350,42 @@ export async function syncRemindersToCloud(
   if (!user) return false;
 
   try {
-    const supabaseReminders = reminders.map((r) =>
+    // First, fetch existing reminder IDs from cloud for this user
+    const { data: existingReminders } = await supabase
+      .from("reminders")
+      .select("id, local_id")
+      .eq("user_id", user.id);
+
+    const existingSyncIds = new Set(existingReminders?.map((r) => r.id) || []);
+    const existingLocalIds = new Set(
+      existingReminders?.map((r) => r.local_id) || [],
+    );
+
+    // Filter reminders: only sync those that are new or belong to current user
+    const remindersToSync = reminders.filter((r) => {
+      // If it has a syncId that exists in cloud for this user, sync it
+      if (r.syncId && existingSyncIds.has(r.syncId)) {
+        return true;
+      }
+      // If it has a local_id that exists in cloud for this user, sync it
+      if (existingLocalIds.has(r.id)) {
+        return true;
+      }
+      // If it has no syncId, it's a new local reminder - sync it
+      if (!r.syncId) {
+        return true;
+      }
+      // Otherwise, it belongs to a different user - skip it
+      console.log("Skipping reminder from different user:", r.title);
+      return false;
+    });
+
+    if (remindersToSync.length === 0) {
+      console.log("No reminders to sync for current user");
+      return true;
+    }
+
+    const supabaseReminders = remindersToSync.map((r) =>
       toSupabaseReminder(r, user.id),
     );
 
@@ -362,7 +398,7 @@ export async function syncRemindersToCloud(
       return false;
     }
 
-    console.log("Synced", reminders.length, "reminders to cloud");
+    console.log("Synced", remindersToSync.length, "reminders to cloud");
     return true;
   } catch (error) {
     console.error("Error syncing reminders:", error);

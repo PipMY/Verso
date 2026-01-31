@@ -22,6 +22,7 @@ import {
     FontSizes,
     Spacing,
 } from "@/constants/theme";
+import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import * as Supabase from "@/services/supabase";
 
@@ -30,6 +31,7 @@ export default function AuthScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
+  const { refresh } = useReminders();
 
   const [mode, setMode] = useState<"signin" | "signup" | "link">("signin");
   const [email, setEmail] = useState("");
@@ -87,13 +89,18 @@ export default function AuthScreen() {
         // Sign in
         const user = await Supabase.signInWithEmail(email, password);
         if (user) {
+          // Refresh to load reminders from new account
+          await refresh();
           Alert.alert(
             "Signed In!",
             "Your reminders will now sync with this account.",
             [{ text: "OK", onPress: () => router.back() }],
           );
         } else {
-          Alert.alert("Error", "Invalid email or password");
+          Alert.alert(
+            "Error",
+            "Invalid email or password. If you just signed up, check your email for confirmation.",
+          );
         }
       }
     } catch (error) {
