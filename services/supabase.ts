@@ -184,7 +184,17 @@ function toSupabaseReminder(reminder: Reminder, userId: string) {
 
 // Convert Supabase reminder to local format
 function fromSupabaseReminder(data: any): Reminder {
-  return {
+  // Parse snooze_presets if it's a string
+  let snoozePresets = data.snooze_presets || [];
+  if (typeof snoozePresets === "string") {
+    try {
+      snoozePresets = JSON.parse(snoozePresets);
+    } catch {
+      snoozePresets = [];
+    }
+  }
+
+  const reminder: Reminder = {
     id: data.local_id || data.id,
     syncId: data.id,
     deviceId: data.device_id,
@@ -192,16 +202,27 @@ function fromSupabaseReminder(data: any): Reminder {
     notes: data.notes,
     datetime: data.datetime,
     snoozedUntil: data.snoozed_until,
-    isCompleted: data.is_completed,
+    isCompleted: data.is_completed || false,
     completedAt: data.completed_at,
     priority: data.priority || "medium",
     recurrence: data.recurrence,
-    snoozePresets: data.snooze_presets || [],
+    snoozePresets: snoozePresets,
     tags: data.tags || [],
     notificationId: data.notification_id,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
+
+  console.log(
+    "Parsed reminder from cloud:",
+    reminder.title,
+    "datetime:",
+    reminder.datetime,
+    "isCompleted:",
+    reminder.isCompleted,
+  );
+
+  return reminder;
 }
 
 // Fetch all reminders from Supabase
