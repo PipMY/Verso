@@ -4,24 +4,24 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-    BorderRadius,
-    Brand,
-    Colors,
-    FontSizes,
-    Spacing,
+  BorderRadius,
+  Brand,
+  Colors,
+  FontSizes,
+  Spacing,
 } from "@/constants/theme";
 import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -58,7 +58,6 @@ const QUICK_TIMES = [
 
 export default function AddReminderModal() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
   const { addReminder } = useReminders();
@@ -123,278 +122,294 @@ export default function AddReminderModal() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      edges={["bottom"]}
     >
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
-        {/* Title Input */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>Title</Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.titleInput,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                color: colors.text,
-                borderColor: colors.cardBorder,
-              },
-            ]}
-            placeholder="What do you need to remember?"
-            placeholderTextColor={colors.textMuted}
-            value={title}
-            onChangeText={setTitle}
-            autoFocus
-            maxLength={100}
-          />
-        </View>
-
-        {/* Notes Input */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>
-            Notes (optional)
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.notesInput,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                color: colors.text,
-                borderColor: colors.cardBorder,
-              },
-            ]}
-            placeholder="Add any additional details..."
-            placeholderTextColor={colors.textMuted}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* Quick Time Buttons */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>
-            Quick Set
-          </Text>
-          <View style={styles.quickTimeRow}>
-            {QUICK_TIMES.map((option) => (
-              <Pressable
-                key={option.label}
-                style={[
-                  styles.quickTimeButton,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                onPress={() => handleQuickTime(option.getDate)}
-              >
-                <Text style={[styles.quickTimeText, { color: colors.text }]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Date & Time Display with adjusters */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>
-            Date & Time
-          </Text>
-
-          {/* Date adjuster */}
-          <View
-            style={[
-              styles.dateTimeCard,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                borderColor: colors.cardBorder,
-              },
-            ]}
-          >
-            <Pressable
-              style={styles.adjusterButton}
-              onPress={() => adjustDate(-1)}
-            >
-              <Ionicons name="remove-circle" size={28} color={Brand.primary} />
-            </Pressable>
-            <View style={styles.dateTimeCenter}>
-              <Ionicons name="calendar" size={20} color={Brand.primary} />
-              <Text style={[styles.dateTimeValue, { color: colors.text }]}>
-                {format(datetime, "EEE, MMM d, yyyy")}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.adjusterButton}
-              onPress={() => adjustDate(1)}
-            >
-              <Ionicons name="add-circle" size={28} color={Brand.primary} />
-            </Pressable>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Title Input */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Title
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                styles.titleInput,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  color: colors.text,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              placeholder="What do you need to remember?"
+              placeholderTextColor={colors.textMuted}
+              value={title}
+              onChangeText={setTitle}
+              autoFocus
+              maxLength={100}
+            />
           </View>
 
-          {/* Time adjuster */}
-          <View
-            style={[
-              styles.dateTimeCard,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                borderColor: colors.cardBorder,
-              },
-            ]}
-          >
-            <Pressable
-              style={styles.adjusterButton}
-              onPress={() => adjustHours(-1)}
-            >
-              <Ionicons
-                name="remove-circle"
-                size={28}
-                color={Brand.secondary}
-              />
-            </Pressable>
-            <View style={styles.dateTimeCenter}>
-              <Ionicons name="time" size={20} color={Brand.secondary} />
-              <Text style={[styles.dateTimeValue, { color: colors.text }]}>
-                {format(datetime, "h:mm a")}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.adjusterButton}
-              onPress={() => adjustHours(1)}
-            >
-              <Ionicons name="add-circle" size={28} color={Brand.secondary} />
-            </Pressable>
+          {/* Notes Input */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Notes (optional)
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                styles.notesInput,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  color: colors.text,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              placeholder="Add any additional details..."
+              placeholderTextColor={colors.textMuted}
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
           </View>
-        </View>
 
-        {/* Recurrence */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>
-            Repeat
-          </Text>
-          <View style={styles.recurrenceRow}>
-            {RECURRENCE_OPTIONS.map((option) => (
-              <Pressable
-                key={option.value}
-                style={[
-                  styles.recurrenceButton,
-                  {
-                    backgroundColor:
-                      recurrence === option.value
-                        ? Brand.primary
-                        : colors.backgroundSecondary,
-                    borderColor:
-                      recurrence === option.value
-                        ? Brand.primary
-                        : colors.cardBorder,
-                  },
-                ]}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setRecurrence(option.value);
-                }}
-              >
-                <Ionicons
-                  name={option.icon}
-                  size={18}
-                  color={
-                    recurrence === option.value ? "#fff" : colors.textMuted
-                  }
-                />
-                <Text
+          {/* Quick Time Buttons */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Quick Set
+            </Text>
+            <View style={styles.quickTimeRow}>
+              {QUICK_TIMES.map((option) => (
+                <Pressable
+                  key={option.label}
                   style={[
-                    styles.recurrenceText,
+                    styles.quickTimeButton,
                     {
-                      color: recurrence === option.value ? "#fff" : colors.text,
+                      backgroundColor: colors.backgroundSecondary,
+                      borderColor: colors.cardBorder,
                     },
                   ]}
+                  onPress={() => handleQuickTime(option.getDate)}
                 >
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text style={[styles.quickTimeText, { color: colors.text }]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
 
-        {/* Priority */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>
-            Priority
-          </Text>
-          <View style={styles.priorityRow}>
-            {PRIORITY_OPTIONS.map((option) => (
+          {/* Date & Time Display with adjusters */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Date & Time
+            </Text>
+
+            {/* Date adjuster */}
+            <View
+              style={[
+                styles.dateTimeCard,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
               <Pressable
-                key={option.value}
-                style={[
-                  styles.priorityButton,
-                  {
-                    backgroundColor:
-                      priority === option.value
-                        ? option.color
-                        : colors.backgroundSecondary,
-                    borderColor:
-                      priority === option.value
-                        ? option.color
-                        : colors.cardBorder,
-                  },
-                ]}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setPriority(option.value);
-                }}
+                style={styles.adjusterButton}
+                onPress={() => adjustDate(-1)}
               >
-                <Text
-                  style={[
-                    styles.priorityText,
-                    { color: priority === option.value ? "#fff" : colors.text },
-                  ]}
-                >
-                  {option.label}
-                </Text>
+                <Ionicons
+                  name="remove-circle"
+                  size={28}
+                  color={Brand.primary}
+                />
               </Pressable>
-            ))}
-          </View>
-        </View>
-      </ScrollView>
+              <View style={styles.dateTimeCenter}>
+                <Ionicons name="calendar" size={20} color={Brand.primary} />
+                <Text style={[styles.dateTimeValue, { color: colors.text }]}>
+                  {format(datetime, "EEE, MMM d, yyyy")}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.adjusterButton}
+                onPress={() => adjustDate(1)}
+              >
+                <Ionicons name="add-circle" size={28} color={Brand.primary} />
+              </Pressable>
+            </View>
 
-      {/* Save Button */}
-      <View
-        style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}
-      >
-        <Pressable
-          style={[
-            styles.saveButton,
-            {
-              backgroundColor: title.trim()
-                ? Brand.primary
-                : colors.backgroundTertiary,
-            },
-          ]}
-          onPress={handleSave}
-          disabled={!title.trim() || isSaving}
-        >
-          <Ionicons name="checkmark" size={22} color="#fff" />
-          <Text style={styles.saveButtonText}>
-            {isSaving ? "Saving..." : "Save Reminder"}
-          </Text>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+            {/* Time adjuster */}
+            <View
+              style={[
+                styles.dateTimeCard,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <Pressable
+                style={styles.adjusterButton}
+                onPress={() => adjustHours(-1)}
+              >
+                <Ionicons
+                  name="remove-circle"
+                  size={28}
+                  color={Brand.secondary}
+                />
+              </Pressable>
+              <View style={styles.dateTimeCenter}>
+                <Ionicons name="time" size={20} color={Brand.secondary} />
+                <Text style={[styles.dateTimeValue, { color: colors.text }]}>
+                  {format(datetime, "h:mm a")}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.adjusterButton}
+                onPress={() => adjustHours(1)}
+              >
+                <Ionicons name="add-circle" size={28} color={Brand.secondary} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Recurrence */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Repeat
+            </Text>
+            <View style={styles.recurrenceRow}>
+              {RECURRENCE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  style={[
+                    styles.recurrenceButton,
+                    {
+                      backgroundColor:
+                        recurrence === option.value
+                          ? Brand.primary
+                          : colors.backgroundSecondary,
+                      borderColor:
+                        recurrence === option.value
+                          ? Brand.primary
+                          : colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setRecurrence(option.value);
+                  }}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={
+                      recurrence === option.value ? "#fff" : colors.textMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.recurrenceText,
+                      {
+                        color:
+                          recurrence === option.value ? "#fff" : colors.text,
+                      },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Priority */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Priority
+            </Text>
+            <View style={styles.priorityRow}>
+              {PRIORITY_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  style={[
+                    styles.priorityButton,
+                    {
+                      backgroundColor:
+                        priority === option.value
+                          ? option.color
+                          : colors.backgroundSecondary,
+                      borderColor:
+                        priority === option.value
+                          ? option.color
+                          : colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPriority(option.value);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.priorityText,
+                      {
+                        color: priority === option.value ? "#fff" : colors.text,
+                      },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Save Button */}
+        <View style={styles.footer}>
+          <Pressable
+            style={[
+              styles.saveButton,
+              {
+                backgroundColor: title.trim()
+                  ? Brand.primary
+                  : colors.backgroundTertiary,
+              },
+            ]}
+            onPress={handleSave}
+            disabled={!title.trim() || isSaving}
+          >
+            <Ionicons name="checkmark" size={22} color="#fff" />
+            <Text style={styles.saveButtonText}>
+              {isSaving ? "Saving..." : "Save Reminder"}
+            </Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  keyboardView: {
     flex: 1,
   },
   scrollView: {
