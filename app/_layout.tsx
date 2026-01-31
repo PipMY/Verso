@@ -1,7 +1,7 @@
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -80,6 +80,14 @@ function RootLayoutNav() {
         />
         <Stack.Screen
           name="paywall"
+          options={{
+            presentation: "modal",
+            title: "",
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="auth"
           options={{
             presentation: "modal",
             title: "",

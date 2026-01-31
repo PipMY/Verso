@@ -79,7 +79,7 @@ export async function signInAnonymously(): Promise<User | null> {
   }
 }
 
-// Sign in with email (for users who want to create an account)
+// Sign in with email
 export async function signInWithEmail(
   email: string,
   password: string,
@@ -93,24 +93,40 @@ export async function signInWithEmail(
     });
 
     if (error) {
-      // Try signing up if sign in fails
-      const { data: signUpData, error: signUpError } =
-        await supabase.auth.signUp({
-          email,
-          password,
-        });
-
-      if (signUpError) {
-        console.error("Sign up error:", signUpError);
-        return null;
-      }
-
-      return signUpData.user;
+      console.error("Sign in error:", error);
+      return null;
     }
 
+    console.log("Signed in with email:", data.user?.id);
     return data.user;
   } catch (error) {
     console.error("Error signing in with email:", error);
+    return null;
+  }
+}
+
+// Sign up with email (create new account)
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+): Promise<User | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error("Sign up error:", error);
+      return null;
+    }
+
+    console.log("Signed up with email:", data.user?.id);
+    return data.user;
+  } catch (error) {
+    console.error("Error signing up with email:", error);
     return null;
   }
 }
@@ -155,6 +171,22 @@ export async function getCurrentUser(): Promise<User | null> {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+}
+
+// Get user info (email, anonymous status)
+export async function getUserInfo(): Promise<{
+  id: string;
+  email: string | null;
+  isAnonymous: boolean;
+} | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email || null,
+    isAnonymous: user.is_anonymous || !user.email,
+  };
 }
 
 // ============ Reminders Sync ============

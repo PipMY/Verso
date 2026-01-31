@@ -2,30 +2,31 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-    BorderRadius,
-    Brand,
-    Colors,
-    FontSizes,
-    Spacing,
+  BorderRadius,
+  Brand,
+  Colors,
+  FontSizes,
+  Spacing,
 } from "@/constants/theme";
 import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import * as Notifications from "@/services/notifications";
 import * as Storage from "@/services/storage";
+import * as Supabase from "@/services/supabase";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -44,6 +45,20 @@ export default function SettingsScreen() {
   const [hapticEnabled, setHapticEnabled] = useState(
     preferences.hapticFeedback,
   );
+  const [userInfo, setUserInfo] = useState<{
+    id: string;
+    email: string | null;
+    isAnonymous: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    loadUserInfo();
+  }, []);
+
+  const loadUserInfo = async () => {
+    const info = await Supabase.getUserInfo();
+    setUserInfo(info);
+  };
 
   const handleToggleHaptic = async (value: boolean) => {
     setHapticEnabled(value);
@@ -57,6 +72,25 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await syncNow();
     Alert.alert("Sync Complete", "Your reminders have been synced.");
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      "Sign Out",
+      "Your local reminders will be kept, but you'll need to sign in again to sync.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            await Supabase.signOut();
+            setUserInfo(null);
+            Alert.alert("Signed Out", "You have been signed out.");
+          },
+        },
+      ],
+    );
   };
 
   const handleTestNotification = async () => {
@@ -244,6 +278,41 @@ export default function SettingsScreen() {
                 <ActivityIndicator size="small" color={Brand.primary} />
               ) : undefined
             }
+          />
+        )}
+
+        {/* Account Info */}
+        {userInfo?.isAnonymous ? (
+          <SettingRow
+            icon="person-add-outline"
+            iconColor={Brand.secondary}
+            title="Link Account"
+            subtitle="Add email to sync across devices"
+            onPress={() => router.push("/auth")}
+          />
+        ) : userInfo?.email ? (
+          <>
+            <SettingRow
+              icon="person-outline"
+              iconColor={Brand.success}
+              title="Account"
+              subtitle={userInfo.email}
+            />
+            <SettingRow
+              icon="log-out-outline"
+              iconColor={Brand.error}
+              title="Sign Out"
+              subtitle="Keep local reminders, stop syncing"
+              onPress={handleSignOut}
+            />
+          </>
+        ) : (
+          <SettingRow
+            icon="log-in-outline"
+            iconColor={Brand.primary}
+            title="Sign In"
+            subtitle="Sign in to sync across devices"
+            onPress={() => router.push("/auth")}
           />
         )}
       </View>
