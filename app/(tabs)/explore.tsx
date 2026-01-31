@@ -1,112 +1,246 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { addDays, format, isSameDay, parseISO, startOfDay } from "date-fns";
+import { useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import {
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View
+} from "react-native";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { EmptyState } from "@/components/EmptyState";
+import { FloatingActionButton } from "@/components/FloatingActionButton";
+import { ReminderCard } from "@/components/ReminderCard";
+import { SectionHeader } from "@/components/SectionHeader";
+import { SnoozeModal } from "@/components/SnoozeModal";
+import {
+    BorderRadius,
+    Brand,
+    Colors,
+    FontSizes,
+    Spacing,
+} from "@/constants/theme";
+import { useReminders } from "@/context/RemindersContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Reminder } from "@/types/reminder";
 
-export default function TabTwoScreen() {
+export default function UpcomingScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme() ?? "dark";
+  const colors = Colors[colorScheme];
+
+  const {
+    isLoading,
+    upcomingReminders,
+    completeReminder,
+    snoozeReminder,
+    refresh,
+  } = useReminders();
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [snoozeModalVisible, setSnoozeModalVisible] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(
+    null,
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
+
+  const handleSnooze = (reminder: Reminder) => {
+    setSelectedReminder(reminder);
+    setSnoozeModalVisible(true);
+  };
+
+  const handleSnoozeConfirm = async (minutes: number) => {
+    if (selectedReminder) {
+      await snoozeReminder(selectedReminder.id, minutes);
+    }
+  };
+
+  const handleReminderPress = (reminder: Reminder) => {
+    router.push({ pathname: "/edit-reminder", params: { id: reminder.id } });
+  };
+
+  const handleAddReminder = () => {
+    router.push("/modal");
+  };
+
+  // Group reminders by date
+  const groupedReminders = upcomingReminders.reduce(
+    (groups, reminder) => {
+      const date = startOfDay(
+        parseISO(reminder.snoozedUntil || reminder.datetime),
+      );
+      const dateKey = format(date, "yyyy-MM-dd");
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = {
+          date,
+          reminders: [],
+        };
+      }
+      groups[dateKey].reminders.push(reminder);
+      return groups;
+    },
+    {} as Record<string, { date: Date; reminders: Reminder[] }>,
+  );
+
+  const sortedGroups = Object.values(groupedReminders).sort(
+    (a, b) => a.date.getTime() - b.date.getTime(),
+  );
+
+  const formatDateHeader = (date: Date) => {
+    const today = startOfDay(new Date());
+    const tomorrow = addDays(today, 1);
+
+    if (isSameDay(date, tomorrow)) {
+      return "Tomorrow";
+    }
+    return format(date, "EEEE, MMMM d");
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <Animated.View
+        entering={FadeIn.duration(500)}
+        style={[styles.header, { paddingTop: insets.top + Spacing.md }]}
+      >
+        <View>
+          <Text style={[styles.greeting, { color: colors.textMuted }]}>
+            Plan Ahead
+          </Text>
+          <Text style={[styles.title, { color: colors.text }]}>Upcoming</Text>
+        </View>
+        <View
+          style={[
+            styles.countBadge,
+            { backgroundColor: Brand.secondary + "20" },
+          ]}
+        >
+          <Text style={[styles.countText, { color: Brand.secondary }]}>
+            {upcomingReminders.length}
+          </Text>
+        </View>
+      </Animated.View>
+
+      {/* Main content */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          upcomingReminders.length === 0 && styles.emptyContent,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Brand.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {upcomingReminders.length === 0 && !isLoading ? (
+          <EmptyState
+            icon="calendar-outline"
+            title="No Upcoming Reminders"
+            description="All your future reminders will appear here. Add a reminder for later to get started."
+            actionLabel="Add Reminder"
+            onAction={handleAddReminder}
+          />
+        ) : (
+          <>
+            {sortedGroups.map((group, groupIndex) => (
+              <Animated.View
+                key={format(group.date, "yyyy-MM-dd")}
+                entering={FadeInDown.duration(400).delay(groupIndex * 100)}
+              >
+                <SectionHeader
+                  title={formatDateHeader(group.date)}
+                  count={group.reminders.length}
+                  icon="calendar"
+                  iconColor={Brand.secondary}
+                />
+                {group.reminders.map((reminder, index) => (
+                  <Animated.View
+                    key={reminder.id}
+                    entering={FadeInDown.duration(300).delay(index * 50)}
+                  >
+                    <ReminderCard
+                      reminder={reminder}
+                      onPress={() => handleReminderPress(reminder)}
+                      onComplete={() => completeReminder(reminder.id)}
+                      onSnooze={() => handleSnooze(reminder)}
+                    />
+                  </Animated.View>
+                ))}
+              </Animated.View>
+            ))}
+
+            {/* Bottom padding for FAB */}
+            <View style={{ height: 100 }} />
+          </>
+        )}
+      </ScrollView>
+
+      {/* FAB */}
+      <FloatingActionButton
+        onPress={handleAddReminder}
+        color={Brand.secondary}
+      />
+
+      {/* Snooze Modal */}
+      <SnoozeModal
+        visible={snoozeModalVisible}
+        onClose={() => setSnoozeModalVisible(false)}
+        onSnooze={handleSnoozeConfirm}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  greeting: {
+    fontSize: FontSizes.sm,
+    marginBottom: Spacing.xs,
+  },
+  title: {
+    fontSize: FontSizes.xxl,
+    fontWeight: "700",
+  },
+  countBadge: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+  countText: {
+    fontSize: FontSizes.lg,
+    fontWeight: "700",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: Spacing.xxl,
+  },
+  emptyContent: {
+    flex: 1,
   },
 });

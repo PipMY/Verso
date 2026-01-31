@@ -1,50 +1,180 @@
-# Welcome to your Expo app 👋
+# Verso - Cross-Platform Reminders App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+<p align="center">
+  <img src="./assets/images/icon.png" width="120" alt="Verso Logo">
+</p>
 
-## Get started
+**Verso** is a beautiful, fully-functional cross-platform reminders app built for the RevenueCat Shipyard hackathon, designed specifically for Sam Beckman's brief.
 
-1. Install dependencies
+## 🎯 Problem Statement
 
-   ```bash
-   npm install
-   ```
+Sam lives by reminders, but switching between Android and iOS means rebuilding his entire system from scratch. He wants a beautiful, fully functional reminders app on both iOS + Android with:
 
-2. Start the app
+- ✅ **Custom snoozes from notifications** - Snooze for any duration (5 min, 22 min, 1 hour, etc.) directly from the notification
+- ✅ **Powerful recurring rules** - Daily, weekly, monthly, and custom recurrence patterns
+- ✅ **True sync** - Dismissing once clears everywhere (coming in Pro version)
 
-   ```bash
-   npx expo start
-   ```
+## ✨ Features
 
-In the output, you'll find options to open the app in a
+### Core Features (Free)
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- 📝 Create and manage reminders with titles and notes
+- ⏰ Set date and time with quick shortcuts
+- 🔔 Push notifications with actionable snooze buttons
+- 🔄 Basic recurrence (daily, weekly, monthly)
+- 🎨 Beautiful dark mode UI with purple/teal accents
+- 🏷️ Priority levels (low, medium, high)
+- 📱 Works on both iOS and Android
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Pro Features (Subscription)
 
-## Get a fresh project
+- ☁️ Cloud sync across all devices
+- ♾️ Unlimited reminders
+- ⏱️ Custom snooze presets (e.g., 22 minutes)
+- 🔁 Advanced recurrence patterns
+- 🎨 Additional themes
+- 📊 Widgets for home screen
 
-When you're ready, run:
+## 🛠️ Tech Stack
+
+- **Framework:** React Native with Expo SDK 54
+- **Navigation:** Expo Router (file-based routing)
+- **State Management:** React Context + Hooks
+- **Storage:** AsyncStorage for local persistence
+- **Notifications:** expo-notifications
+- **Animations:** react-native-reanimated
+- **Monetization:** RevenueCat SDK
+- **Language:** TypeScript
+
+## 📱 Screenshots
+
+| Home Screen                     | Add Reminder                  | Snooze Modal                        |
+| ------------------------------- | ----------------------------- | ----------------------------------- |
+| ![Home](./screenshots/home.png) | ![Add](./screenshots/add.png) | ![Snooze](./screenshots/snooze.png) |
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- Expo Go app on your phone (for testing)
+
+### Installation
 
 ```bash
-npm run reset-project
+# Clone the repository
+git clone https://github.com/yourusername/verso.git
+
+# Navigate to project
+cd verso
+
+# Install dependencies
+npm install
+
+# Start the development server
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Running on Device
 
-## Learn more
+1. Install **Expo Go** on your iOS or Android device
+2. Scan the QR code from the terminal
+3. The app will load on your device
 
-To learn more about developing your project with Expo, look at the following resources:
+## 🏗️ Project Structure
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+verso/
+├── app/                    # Expo Router screens
+│   ├── (tabs)/            # Tab navigation screens
+│   │   ├── index.tsx      # Home screen (Today's reminders)
+│   │   └── explore.tsx    # Upcoming reminders
+│   ├── modal.tsx          # Add reminder modal
+│   ├── edit-reminder.tsx  # Edit reminder modal
+│   ├── settings.tsx       # Settings screen
+│   └── paywall.tsx        # Premium subscription paywall
+├── components/            # Reusable UI components
+│   ├── ReminderCard.tsx   # Reminder list item
+│   ├── SnoozeModal.tsx    # Snooze time picker
+│   ├── EmptyState.tsx     # Empty list placeholder
+│   └── FloatingActionButton.tsx
+├── context/               # React Context providers
+│   └── RemindersContext.tsx
+├── services/              # Business logic services
+│   ├── storage.ts         # AsyncStorage wrapper
+│   ├── notifications.ts   # Push notification handling
+│   └── revenuecat.ts      # Subscription management
+├── types/                 # TypeScript definitions
+│   └── reminder.ts        # Reminder data types
+└── constants/             # App constants
+    └── theme.ts           # Colors, spacing, typography
+```
 
-## Join the community
+## 💰 Monetization Strategy
 
-Join our community of developers creating universal apps.
+Verso uses a freemium model powered by **RevenueCat**:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Free Tier
+
+- Up to 10 active reminders
+- Basic recurrence options
+- Standard snooze presets
+- Local storage only
+
+### Pro Tier ($4.99/month or $39.99/year)
+
+- Unlimited reminders
+- Cloud sync across devices
+- Custom snooze presets
+- Advanced recurrence patterns
+- Premium themes
+- Home screen widgets
+
+### Why This Works
+
+- Low friction for new users to try the app
+- Clear value proposition for power users like Sam
+- Recurring revenue for sustainable development
+- RevenueCat handles all subscription management
+
+## 🗺️ Roadmap
+
+### Phase 1 (MVP - Hackathon) ✅
+
+- [x] Core reminder CRUD operations
+- [x] Push notifications with snooze actions
+- [x] Basic recurrence patterns
+- [x] Beautiful dark mode UI
+- [x] RevenueCat integration
+
+### Phase 2 (Post-Hackathon)
+
+- [ ] Cloud sync with real-time updates
+- [ ] Widget support (iOS & Android)
+- [ ] Natural language input ("Remind me tomorrow at 3pm")
+- [ ] Location-based reminders
+- [ ] Apple Watch & Wear OS companion apps
+
+### Phase 3 (Future)
+
+- [ ] Team/family sharing
+- [ ] Calendar integration
+- [ ] Siri/Google Assistant shortcuts
+- [ ] Desktop apps (macOS, Windows)
+
+## 👥 Team
+
+- **Emily Ball** - Design
+- **Pip Martin-Yates** - Development
+
+## 📄 License
+
+This project is built for the RevenueCat Shipyard: Creator Contest hackathon.
+
+---
+
+<p align="center">
+  Made with ❤️ for Sam Beckman<br>
+  <strong>RevenueCat Shipyard 2026</strong>
+</p>

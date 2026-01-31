@@ -1,98 +1,373 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import { format } from "date-fns";
+import { useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import {
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
+import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { EmptyState } from "@/components/EmptyState";
+import { FloatingActionButton } from "@/components/FloatingActionButton";
+import { ReminderCard } from "@/components/ReminderCard";
+import { SectionHeader } from "@/components/SectionHeader";
+import { SnoozeModal } from "@/components/SnoozeModal";
+import {
+    BorderRadius,
+    Brand,
+    Colors,
+    FontSizes,
+    Spacing,
+} from "@/constants/theme";
+import { useReminders } from "@/context/RemindersContext";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Reminder } from "@/types/reminder";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme() ?? "dark";
+  const colors = Colors[colorScheme];
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const {
+    isLoading,
+    todayReminders,
+    upcomingReminders,
+    overdueReminders,
+    completedReminders,
+    completeReminder,
+    snoozeReminder,
+    refresh,
+  } = useReminders();
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [snoozeModalVisible, setSnoozeModalVisible] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(
+    null,
+  );
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
+
+  const handleSnooze = (reminder: Reminder) => {
+    setSelectedReminder(reminder);
+    setSnoozeModalVisible(true);
+  };
+
+  const handleSnoozeConfirm = async (minutes: number) => {
+    if (selectedReminder) {
+      await snoozeReminder(selectedReminder.id, minutes);
+    }
+  };
+
+  const handleReminderPress = (reminder: Reminder) => {
+    router.push({ pathname: "/edit-reminder", params: { id: reminder.id } });
+  };
+
+  const handleAddReminder = () => {
+    router.push("/modal");
+  };
+
+  const hasReminders =
+    todayReminders.length > 0 ||
+    upcomingReminders.length > 0 ||
+    overdueReminders.length > 0;
+  const today = new Date();
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
+      <Animated.View
+        entering={FadeIn.duration(500)}
+        style={[styles.header, { paddingTop: insets.top + Spacing.md }]}
+      >
+        <View>
+          <Text style={[styles.greeting, { color: colors.textMuted }]}>
+            {format(today, "EEEE, MMMM d")}
+          </Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            Your Reminders
+          </Text>
+        </View>
+        <Pressable
+          style={[
+            styles.settingsButton,
+            { backgroundColor: colors.backgroundSecondary },
+          ]}
+          onPress={() => router.push("/settings")}
+        >
+          <Ionicons name="settings-outline" size={22} color={colors.text} />
+        </Pressable>
+      </Animated.View>
+
+      {/* Stats bar */}
+      {hasReminders && (
+        <Animated.View
+          entering={FadeInDown.duration(500).delay(100)}
+          style={[
+            styles.statsBar,
+            { backgroundColor: colors.backgroundSecondary },
+          ]}
+        >
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: Brand.error }]}>
+              {overdueReminders.length}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>
+              Overdue
+            </Text>
+          </View>
+          <View
+            style={[styles.statDivider, { backgroundColor: colors.separator }]}
+          />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: Brand.primary }]}>
+              {todayReminders.length}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>
+              Today
+            </Text>
+          </View>
+          <View
+            style={[styles.statDivider, { backgroundColor: colors.separator }]}
+          />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: Brand.secondary }]}>
+              {upcomingReminders.length}
+            </Text>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>
+              Upcoming
+            </Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Main content */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !hasReminders && styles.emptyContent,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Brand.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {!hasReminders && !isLoading ? (
+          <EmptyState
+            icon="notifications-outline"
+            title="No Reminders Yet"
+            description="Add your first reminder to get started. Tap the + button below to create one."
+            actionLabel="Add Reminder"
+            onAction={handleAddReminder}
+          />
+        ) : (
+          <>
+            {/* Overdue Section */}
+            {overdueReminders.length > 0 && (
+              <Animated.View
+                entering={FadeInDown.duration(400).delay(150)}
+                layout={Layout.springify()}
+              >
+                <SectionHeader
+                  title="Overdue"
+                  count={overdueReminders.length}
+                  icon="alert-circle"
+                  iconColor={Brand.error}
+                />
+                {overdueReminders.map((reminder, index) => (
+                  <Animated.View
+                    key={reminder.id}
+                    entering={FadeInDown.duration(300).delay(index * 50)}
+                  >
+                    <ReminderCard
+                      reminder={reminder}
+                      onPress={() => handleReminderPress(reminder)}
+                      onComplete={() => completeReminder(reminder.id)}
+                      onSnooze={() => handleSnooze(reminder)}
+                    />
+                  </Animated.View>
+                ))}
+              </Animated.View>
+            )}
+
+            {/* Today Section */}
+            {todayReminders.length > 0 && (
+              <Animated.View
+                entering={FadeInDown.duration(400).delay(200)}
+                layout={Layout.springify()}
+              >
+                <SectionHeader
+                  title="Today"
+                  count={todayReminders.length}
+                  icon="today"
+                  iconColor={Brand.primary}
+                />
+                {todayReminders.map((reminder, index) => (
+                  <Animated.View
+                    key={reminder.id}
+                    entering={FadeInDown.duration(300).delay(index * 50)}
+                  >
+                    <ReminderCard
+                      reminder={reminder}
+                      onPress={() => handleReminderPress(reminder)}
+                      onComplete={() => completeReminder(reminder.id)}
+                      onSnooze={() => handleSnooze(reminder)}
+                    />
+                  </Animated.View>
+                ))}
+              </Animated.View>
+            )}
+
+            {/* Upcoming Section */}
+            {upcomingReminders.length > 0 && (
+              <Animated.View
+                entering={FadeInDown.duration(400).delay(250)}
+                layout={Layout.springify()}
+              >
+                <SectionHeader
+                  title="Upcoming"
+                  count={upcomingReminders.length}
+                  icon="calendar"
+                  iconColor={Brand.secondary}
+                />
+                {upcomingReminders.slice(0, 10).map((reminder, index) => (
+                  <Animated.View
+                    key={reminder.id}
+                    entering={FadeInDown.duration(300).delay(index * 50)}
+                  >
+                    <ReminderCard
+                      reminder={reminder}
+                      onPress={() => handleReminderPress(reminder)}
+                      onComplete={() => completeReminder(reminder.id)}
+                      onSnooze={() => handleSnooze(reminder)}
+                    />
+                  </Animated.View>
+                ))}
+              </Animated.View>
+            )}
+
+            {/* Completed Section (Collapsible) */}
+            {completedReminders.length > 0 && (
+              <Animated.View
+                entering={FadeInDown.duration(400).delay(300)}
+                layout={Layout.springify()}
+              >
+                <SectionHeader
+                  title="Completed"
+                  count={completedReminders.length}
+                  icon="checkmark-circle"
+                  iconColor={Brand.success}
+                  collapsed={!showCompleted}
+                  onToggle={() => setShowCompleted(!showCompleted)}
+                />
+                {showCompleted &&
+                  completedReminders.slice(0, 5).map((reminder, index) => (
+                    <Animated.View
+                      key={reminder.id}
+                      entering={FadeInDown.duration(300).delay(index * 50)}
+                    >
+                      <ReminderCard
+                        reminder={reminder}
+                        onPress={() => handleReminderPress(reminder)}
+                        onComplete={() => completeReminder(reminder.id)}
+                        onSnooze={() => handleSnooze(reminder)}
+                      />
+                    </Animated.View>
+                  ))}
+              </Animated.View>
+            )}
+
+            {/* Bottom padding for FAB */}
+            <View style={{ height: 100 }} />
+          </>
+        )}
+      </ScrollView>
+
+      {/* FAB */}
+      <FloatingActionButton onPress={handleAddReminder} />
+
+      {/* Snooze Modal */}
+      <SnoozeModal
+        visible={snoozeModalVisible}
+        onClose={() => setSnoozeModalVisible(false)}
+        onSnooze={handleSnoozeConfirm}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  greeting: {
+    fontSize: FontSizes.sm,
+    marginBottom: Spacing.xs,
+  },
+  title: {
+    fontSize: FontSizes.xxl,
+    fontWeight: "700",
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsBar: {
+    flexDirection: "row",
+    marginHorizontal: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: FontSizes.xl,
+    fontWeight: "700",
+  },
+  statLabel: {
+    fontSize: FontSizes.xs,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: "100%",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: Spacing.xxl,
+  },
+  emptyContent: {
+    flex: 1,
   },
 });

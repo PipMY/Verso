@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { addDays, addHours, format, setHours, setMinutes } from "date-fns";
+import { addDays, addHours, format, parseISO } from "date-fns";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
     Alert,
     KeyboardAvoidingView,
@@ -25,7 +25,7 @@ import {
 } from "@/constants/theme";
 import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { DEFAULT_SNOOZE_PRESETS, RecurrenceType } from "@/types/reminder";
+import { RecurrenceType } from "@/types/reminder";
 
 const RECURRENCE_OPTIONS: {
   value: RecurrenceType;
@@ -44,33 +44,43 @@ const PRIORITY_OPTIONS = [
   { value: "high", label: "High", color: Brand.error },
 ] as const;
 
-const QUICK_TIMES = [
-  { label: "In 1 hour", getDate: () => addHours(new Date(), 1) },
-  {
-    label: "Tomorrow 9am",
-    getDate: () => setMinutes(setHours(addDays(new Date(), 1), 9), 0),
-  },
-  {
-    label: "Tomorrow 6pm",
-    getDate: () => setMinutes(setHours(addDays(new Date(), 1), 18), 0),
-  },
-];
-
-export default function AddReminderModal() {
+export default function EditReminderScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
-  const { addReminder } = useReminders();
+  const { reminders, updateReminder, deleteReminder, uncompleteReminder } =
+    useReminders();
+
+  const reminder = reminders.find((r) => r.id === id);
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [datetime, setDatetime] = useState(addHours(new Date(), 1));
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [datetime, setDatetime] = useState(new Date());
   const [recurrence, setRecurrence] = useState<RecurrenceType>("none");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (reminder) {
+      setTitle(reminder.title);
+      setNotes(reminder.notes || "");
+      setDatetime(parseISO(reminder.datetime));
+      setRecurrence(reminder.recurrence?.type || "none");
+      setPriority(reminder.priority);
+    }
+  }, [reminder]);
+
+  if (!reminder) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.textMuted }]}>
+          Reminder not found
+        </Text>
+      </View>
+    );
+  }
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -82,11 +92,10 @@ export default function AddReminderModal() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      await addReminder({
+      await updateReminder(id!, {
         title: title.trim(),
         notes: notes.trim() || undefined,
         datetime: datetime.toISOString(),
-        isCompleted: false,
         recurrence:
           recurrence !== "none"
             ? {
@@ -94,22 +103,40 @@ export default function AddReminderModal() {
                 interval: 1,
               }
             : undefined,
-        snoozePresets: DEFAULT_SNOOZE_PRESETS,
         priority,
       });
 
       router.back();
     } catch (error) {
-      console.error("Error saving reminder:", error);
-      Alert.alert("Error", "Failed to save reminder. Please try again.");
+      console.error("Error updating reminder:", error);
+      Alert.alert("Error", "Failed to update reminder. Please try again.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleQuickTime = (getDate: () => Date) => {
-    Haptics.selectionAsync();
-    setDatetime(getDate());
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Reminder",
+      "Are you sure you want to delete this reminder?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await deleteReminder(id!);
+            router.back();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleUncomplete = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await uncompleteReminder(id!);
   };
 
   const adjustDate = (days: number) => {
@@ -133,6 +160,29 @@ export default function AddReminderModal() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Completed status */}
+        {reminder.isCompleted && (
+          <View
+            style={[
+              styles.completedBanner,
+              { backgroundColor: Brand.success + "20" },
+            ]}
+          >
+            <Ionicons name="checkmark-circle" size={20} color={Brand.success} />
+            <Text style={[styles.completedText, { color: Brand.success }]}>
+              Completed{" "}
+              {reminder.completedAt
+                ? format(parseISO(reminder.completedAt), "MMM d, h:mm a")
+                : ""}
+            </Text>
+            <Pressable onPress={handleUncomplete}>
+              <Text style={[styles.uncompleteText, { color: Brand.primary }]}>
+                Restore
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Title Input */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.textMuted }]}>Title</Text>
@@ -150,7 +200,6 @@ export default function AddReminderModal() {
             placeholderTextColor={colors.textMuted}
             value={title}
             onChangeText={setTitle}
-            autoFocus
             maxLength={100}
           />
         </View>
@@ -178,32 +227,6 @@ export default function AddReminderModal() {
             numberOfLines={3}
             textAlignVertical="top"
           />
-        </View>
-
-        {/* Quick Time Buttons */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.textMuted }]}>
-            Quick Set
-          </Text>
-          <View style={styles.quickTimeRow}>
-            {QUICK_TIMES.map((option) => (
-              <Pressable
-                key={option.label}
-                style={[
-                  styles.quickTimeButton,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                onPress={() => handleQuickTime(option.getDate)}
-              >
-                <Text style={[styles.quickTimeText, { color: colors.text }]}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
         </View>
 
         {/* Date & Time Display with adjusters */}
@@ -365,6 +388,17 @@ export default function AddReminderModal() {
             ))}
           </View>
         </View>
+
+        {/* Delete button */}
+        <Pressable
+          style={[styles.deleteButton, { backgroundColor: Brand.error + "15" }]}
+          onPress={handleDelete}
+        >
+          <Ionicons name="trash-outline" size={20} color={Brand.error} />
+          <Text style={[styles.deleteButtonText, { color: Brand.error }]}>
+            Delete Reminder
+          </Text>
+        </Pressable>
       </ScrollView>
 
       {/* Save Button */}
@@ -385,7 +419,7 @@ export default function AddReminderModal() {
         >
           <Ionicons name="checkmark" size={22} color="#fff" />
           <Text style={styles.saveButtonText}>
-            {isSaving ? "Saving..." : "Save Reminder"}
+            {isSaving ? "Saving..." : "Save Changes"}
           </Text>
         </Pressable>
       </View>
@@ -403,6 +437,26 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: Spacing.lg,
     gap: Spacing.lg,
+  },
+  errorText: {
+    textAlign: "center",
+    marginTop: Spacing.xl,
+  },
+  completedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  completedText: {
+    flex: 1,
+    fontSize: FontSizes.sm,
+    fontWeight: "500",
+  },
+  uncompleteText: {
+    fontSize: FontSizes.sm,
+    fontWeight: "600",
   },
   section: {
     gap: Spacing.sm,
@@ -424,22 +478,6 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     minHeight: 80,
-  },
-  quickTimeRow: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-  },
-  quickTimeButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  quickTimeText: {
-    fontSize: FontSizes.xs,
-    fontWeight: "500",
   },
   dateTimeCard: {
     flexDirection: "row",
@@ -493,6 +531,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   priorityText: {
+    fontSize: FontSizes.md,
+    fontWeight: "600",
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.md,
+  },
+  deleteButtonText: {
     fontSize: FontSizes.md,
     fontWeight: "600",
   },
