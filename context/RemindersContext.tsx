@@ -1,16 +1,12 @@
 import * as NotificationService from "@/services/notifications";
 import * as Storage from "@/services/storage";
+import * as Supabase from "@/services/supabase";
 import {
     DEFAULT_USER_PREFERENCES,
     Reminder,
-    UserPreferences
+    UserPreferences,
 } from "@/types/reminder";
-import {
-    addDays,
-    isToday,
-    parseISO,
-    startOfDay
-} from "date-fns";
+import { addDays, isToday, parseISO, startOfDay } from "date-fns";
 import React, {
     createContext,
     ReactNode,
@@ -23,6 +19,8 @@ import React, {
 interface RemindersContextType {
   reminders: Reminder[];
   isLoading: boolean;
+  isSyncing: boolean;
+  isCloudEnabled: boolean;
   preferences: UserPreferences;
   // CRUD operations
   addReminder: (
@@ -40,8 +38,9 @@ interface RemindersContextType {
   overdueReminders: Reminder[];
   // Preferences
   updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
-  // Refresh
+  // Refresh & Sync
   refresh: () => Promise<void>;
+  syncNow: () => Promise<void>;
 }
 
 const RemindersContext = createContext<RemindersContextType | undefined>(
@@ -54,12 +53,125 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     DEFAULT_USER_PREFERENCES,
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isCloudEnabled, setIsCloudEnabled] = useState(false);
 
   // Load data on mount
   useEffect(() => {
     loadData();
     setupNotifications();
+    initializeCloudSync();
   }, []);
+
+  const initializeCloudSync = async () => {
+    if (!Supabase.isSupabaseConfigured()) {
+      console.log("Supabase not configured - running in local-only mode");
+      return;
+    }
+
+    try {
+      // Sign in anonymously
+      const user = await Supabase.signInAnonymously();
+      if (user) {
+        setIsCloudEnabled(true);
+        console.log("Cloud sync enabled for user:", user.id);
+
+        // Initial sync from cloud
+        await syncFromCloud();
+
+        // Subscribe to real-time changes
+        Supabase.subscribeToReminders(
+          handleRemoteInsert,
+          handleRemoteUpdate,
+          handleRemoteDelete,
+        );
+      }
+    } catch (error) {
+      console.error("Error initializing cloud sync:", error);
+    }
+  };
+
+  const handleRemoteInsert = useCallback((reminder: Reminder) => {
+    setReminders((prev) => {
+      // Check if we already have this reminder (by syncId)
+      if (prev.some((r) => r.syncId === reminder.syncId)) {
+        return prev;
+      }
+      return [...prev, reminder];
+    });
+  }, []);
+
+  const handleRemoteUpdate = useCallback((reminder: Reminder) => {
+    setReminders((prev) =>
+      prev.map((r) =>
+        r.syncId === reminder.syncId ? { ...r, ...reminder } : r,
+      ),
+    );
+  }, []);
+
+  const handleRemoteDelete = useCallback((syncId: string) => {
+    setReminders((prev) => prev.filter((r) => r.syncId !== syncId));
+  }, []);
+
+  const syncFromCloud = async () => {
+    if (!isCloudEnabled && !Supabase.isSupabaseConfigured()) return;
+
+    try {
+      setIsSyncing(true);
+      const cloudReminders = await Supabase.fetchRemindersFromCloud();
+
+      if (cloudReminders.length > 0) {
+        // Merge cloud reminders with local (cloud wins for conflicts)
+        setReminders((prev) => {
+          const localMap = new Map(prev.map((r) => [r.syncId || r.id, r]));
+
+          for (const cloudReminder of cloudReminders) {
+            const key = cloudReminder.syncId || cloudReminder.id;
+            const local = localMap.get(key);
+
+            if (
+              !local ||
+              new Date(cloudReminder.updatedAt) > new Date(local.updatedAt)
+            ) {
+              localMap.set(key, cloudReminder);
+            }
+          }
+
+          return Array.from(localMap.values());
+        });
+      }
+    } catch (error) {
+      console.error("Error syncing from cloud:", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const syncToCloud = async (reminder: Reminder) => {
+    if (!isCloudEnabled) return;
+
+    try {
+      await Supabase.upsertReminderToCloud(reminder);
+    } catch (error) {
+      console.error("Error syncing to cloud:", error);
+    }
+  };
+
+  const syncNow = useCallback(async () => {
+    if (!Supabase.isSupabaseConfigured()) return;
+
+    setIsSyncing(true);
+    try {
+      // Push all local reminders to cloud
+      await Supabase.syncRemindersToCloud(reminders);
+      // Pull any remote changes
+      await syncFromCloud();
+    } catch (error) {
+      console.error("Error during manual sync:", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [reminders]);
 
   const loadData = async () => {
     try {
@@ -120,9 +232,13 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       }
 
       setReminders((prev) => [...prev, newReminder]);
+
+      // Sync to cloud
+      syncToCloud(newReminder);
+
       return newReminder;
     },
-    [],
+    [isCloudEnabled],
   );
 
   const updateReminderHandler = useCallback(
@@ -139,9 +255,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
           }
         }
         setReminders((prev) => prev.map((r) => (r.id === id ? updated : r)));
+
+        // Sync to cloud
+        syncToCloud(updated);
       }
     },
-    [],
+    [isCloudEnabled],
   );
 
   const deleteReminderHandler = useCallback(
@@ -150,10 +269,16 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (reminder?.notificationId) {
         await NotificationService.cancelNotification(reminder.notificationId);
       }
+
+      // Delete from cloud first (need syncId before local delete)
+      if (reminder?.syncId && isCloudEnabled) {
+        await Supabase.deleteReminderFromCloud(reminder.syncId);
+      }
+
       await Storage.deleteReminder(id);
       setReminders((prev) => prev.filter((r) => r.id !== id));
     },
-    [reminders],
+    [reminders, isCloudEnabled],
   );
 
   const completeReminderHandler = useCallback(
@@ -162,44 +287,54 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (reminder?.notificationId) {
         await NotificationService.cancelNotification(reminder.notificationId);
       }
-      await Storage.completeReminder(id);
+      const updated = await Storage.completeReminder(id);
+      const completedReminder = {
+        ...reminder!,
+        isCompleted: true,
+        completedAt: new Date().toISOString(),
+      };
       setReminders((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? { ...r, isCompleted: true, completedAt: new Date().toISOString() }
-            : r,
-        ),
+        prev.map((r) => (r.id === id ? completedReminder : r)),
       );
+
+      // Sync to cloud
+      if (updated) syncToCloud(updated);
     },
-    [reminders],
+    [reminders, isCloudEnabled],
   );
 
-  const uncompleteReminderHandler = useCallback(async (id: string) => {
-    const updated = await Storage.updateReminder(id, {
-      isCompleted: false,
-      completedAt: undefined,
-    });
-    if (updated) {
-      // Reschedule notification
-      const notificationId =
-        await NotificationService.scheduleReminderNotification(updated);
-      if (notificationId) {
-        await Storage.updateReminder(id, { notificationId });
+  const uncompleteReminderHandler = useCallback(
+    async (id: string) => {
+      const updated = await Storage.updateReminder(id, {
+        isCompleted: false,
+        completedAt: undefined,
+      });
+      if (updated) {
+        // Reschedule notification
+        const notificationId =
+          await NotificationService.scheduleReminderNotification(updated);
+        if (notificationId) {
+          await Storage.updateReminder(id, { notificationId });
+        }
+        setReminders((prev) =>
+          prev.map((r) =>
+            r.id === id
+              ? {
+                  ...r,
+                  isCompleted: false,
+                  completedAt: undefined,
+                  notificationId: notificationId || undefined,
+                }
+              : r,
+          ),
+        );
+
+        // Sync to cloud
+        syncToCloud(updated);
       }
-      setReminders((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                isCompleted: false,
-                completedAt: undefined,
-                notificationId: notificationId || undefined,
-              }
-            : r,
-        ),
-      );
-    }
-  }, []);
+    },
+    [isCloudEnabled],
+  );
 
   const snoozeReminderHandler = useCallback(
     async (id: string, minutes: number) => {
@@ -224,9 +359,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
               : r,
           ),
         );
+
+        // Sync to cloud
+        syncToCloud(updated);
       }
     },
-    [],
+    [isCloudEnabled],
   );
 
   const updatePreferencesHandler = useCallback(
@@ -290,6 +428,8 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       value={{
         reminders,
         isLoading,
+        isSyncing,
+        isCloudEnabled,
         preferences,
         addReminder: addReminderHandler,
         updateReminder: updateReminderHandler,
@@ -303,6 +443,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         overdueReminders,
         updatePreferences: updatePreferencesHandler,
         refresh,
+        syncNow,
       }}
     >
       {children}

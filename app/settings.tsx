@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Pressable,
     ScrollView,
@@ -31,7 +32,14 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
-  const { preferences, updatePreferences, refresh } = useReminders();
+  const {
+    preferences,
+    updatePreferences,
+    refresh,
+    isSyncing,
+    isCloudEnabled,
+    syncNow,
+  } = useReminders();
 
   const [hapticEnabled, setHapticEnabled] = useState(
     preferences.hapticFeedback,
@@ -43,6 +51,12 @@ export default function SettingsScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     await updatePreferences({ hapticFeedback: value });
+  };
+
+  const handleSyncNow = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await syncNow();
+    Alert.alert("Sync Complete", "Your reminders have been synced.");
   };
 
   const handleTestNotification = async () => {
@@ -194,10 +208,44 @@ export default function SettingsScreen() {
 
         <SettingRow
           icon="cloud-outline"
-          iconColor={Brand.info}
+          iconColor={isCloudEnabled ? Brand.success : Brand.info}
           title="Cloud Sync"
-          subtitle="Coming soon - sync across devices"
+          subtitle={
+            isCloudEnabled
+              ? "Connected - syncing across devices"
+              : "Not configured - local only"
+          }
+          right={
+            isCloudEnabled ? (
+              <View style={styles.syncStatus}>
+                {isSyncing ? (
+                  <ActivityIndicator size="small" color={Brand.primary} />
+                ) : (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={Brand.success}
+                  />
+                )}
+              </View>
+            ) : undefined
+          }
         />
+
+        {isCloudEnabled && (
+          <SettingRow
+            icon="sync-outline"
+            iconColor={Brand.primary}
+            title="Sync Now"
+            subtitle={isSyncing ? "Syncing..." : "Manually sync your reminders"}
+            onPress={handleSyncNow}
+            right={
+              isSyncing ? (
+                <ActivityIndicator size="small" color={Brand.primary} />
+              ) : undefined
+            }
+          />
+        )}
       </View>
 
       {/* Premium */}
@@ -363,6 +411,9 @@ const styles = StyleSheet.create({
   settingSubtitle: {
     fontSize: FontSizes.sm,
     marginTop: 2,
+  },
+  syncStatus: {
+    marginLeft: Spacing.sm,
   },
   premiumCard: {
     padding: Spacing.lg,
