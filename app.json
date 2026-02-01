@@ -12,7 +12,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.verso.reminders",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

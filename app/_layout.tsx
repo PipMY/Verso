@@ -1,17 +1,20 @@
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import "react-native-reanimated";
 
 import { Brand, Colors } from "@/constants/theme";
 import { RemindersProvider } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { initializeRevenueCat } from "@/services/revenuecat";
+
+import { hasCompletedOnboarding } from "./onboarding";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -44,12 +47,51 @@ const VersoLightTheme = {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+  const segments = useSegments();
+  const [isReady, setIsReady] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  useEffect(() => {
+    async function checkOnboarding() {
+      const completed = await hasCompletedOnboarding();
+      setNeedsOnboarding(!completed);
+      setIsReady(true);
+    }
+    checkOnboarding();
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const inOnboarding = segments[0] === "onboarding";
+
+    if (needsOnboarding && !inOnboarding) {
+      router.replace("/onboarding");
+    }
+  }, [isReady, needsOnboarding, segments]);
+
+  if (!isReady) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: Colors.dark.background,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={Brand.primary} />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider
       value={colorScheme === "dark" ? VersoDarkTheme : VersoLightTheme}
     >
       <Stack>
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="modal"
