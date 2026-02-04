@@ -1,27 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
-import { addDays, addHours, format, setHours, setMinutes } from "date-fns";
+import {
+    addDays,
+    addHours,
+    addMinutes,
+    format,
+    setHours,
+    setMinutes,
+} from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  BorderRadius,
-  Brand,
-  Colors,
-  FontSizes,
-  Spacing,
+    BorderRadius,
+    Brand,
+    Colors,
+    FontSizes,
+    Spacing,
 } from "@/constants/theme";
 import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -119,6 +126,11 @@ export default function AddReminderModal() {
   const adjustHours = (hours: number) => {
     Haptics.selectionAsync();
     setDatetime((prev) => addHours(prev, hours));
+  };
+
+  const adjustMinutes = (mins: number) => {
+    Haptics.selectionAsync();
+    setDatetime((prev) => addMinutes(prev, mins));
   };
 
   return (
@@ -252,7 +264,7 @@ export default function AddReminderModal() {
               </Pressable>
             </View>
 
-            {/* Time adjuster */}
+            {/* Time adjuster - Hours */}
             <View
               style={[
                 styles.dateTimeCard,
@@ -283,6 +295,94 @@ export default function AddReminderModal() {
                 onPress={() => adjustHours(1)}
               >
                 <Ionicons name="add-circle" size={28} color={Brand.secondary} />
+              </Pressable>
+            </View>
+
+            {/* Minute fine-tuning */}
+            <View style={styles.minuteAdjustRow}>
+              <Pressable
+                style={[
+                  styles.minuteButton,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => adjustMinutes(-15)}
+              >
+                <Text style={[styles.minuteButtonText, { color: colors.text }]}>
+                  -15m
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.minuteButton,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => adjustMinutes(-5)}
+              >
+                <Text style={[styles.minuteButtonText, { color: colors.text }]}>
+                  -5m
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.minuteButton,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => adjustMinutes(-1)}
+              >
+                <Text style={[styles.minuteButtonText, { color: colors.text }]}>
+                  -1m
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.minuteButton,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => adjustMinutes(1)}
+              >
+                <Text style={[styles.minuteButtonText, { color: colors.text }]}>
+                  +1m
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.minuteButton,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => adjustMinutes(5)}
+              >
+                <Text style={[styles.minuteButtonText, { color: colors.text }]}>
+                  +5m
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.minuteButton,
+                  {
+                    backgroundColor: colors.backgroundSecondary,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={() => adjustMinutes(15)}
+              >
+                <Text style={[styles.minuteButtonText, { color: colors.text }]}>
+                  +15m
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -476,6 +576,23 @@ const styles = StyleSheet.create({
   },
   dateTimeValue: {
     fontSize: FontSizes.lg,
+    fontWeight: "600",
+  },
+  minuteAdjustRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  minuteButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  minuteButtonText: {
+    fontSize: FontSizes.sm,
     fontWeight: "600",
   },
   recurrenceRow: {

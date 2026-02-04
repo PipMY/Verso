@@ -4,14 +4,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-    Animated,
-    Dimensions,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    ViewToken,
+  Animated,
+  Dimensions,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewToken,
 } from "react-native";
 
 import { Brand, Colors } from "@/constants/theme";
@@ -199,12 +199,18 @@ export default function OnboardingScreen() {
 
   const handleGetStarted = async () => {
     await setOnboardingComplete();
-    router.replace("/(tabs)");
+    // Small delay to ensure AsyncStorage write completes
+    setTimeout(() => {
+      router.replace("/(tabs)");
+    }, 100);
   };
 
   const handleSkip = async () => {
     await setOnboardingComplete();
-    router.replace("/(tabs)");
+    // Small delay to ensure AsyncStorage write completes
+    setTimeout(() => {
+      router.replace("/(tabs)");
+    }, 100);
   };
 
   const isLastSlide = currentIndex === slides.length - 1;

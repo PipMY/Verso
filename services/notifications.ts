@@ -1,7 +1,4 @@
-import {
-    DEFAULT_SNOOZE_PRESETS,
-    Reminder
-} from "@/types/reminder";
+import { DEFAULT_SNOOZE_PRESETS, Reminder } from "@/types/reminder";
 import { differenceInSeconds, parseISO } from "date-fns";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
@@ -66,33 +63,32 @@ export async function scheduleReminderNotification(
     // Create action buttons for snooze presets
     const snoozePresets = reminder.snoozePresets || DEFAULT_SNOOZE_PRESETS;
 
-    // Build category with snooze actions (iOS)
+    // Build category with snooze actions
     const categoryIdentifier = `reminder_${reminder.id}`;
 
-    if (Platform.OS === "ios") {
-      await Notifications.setNotificationCategoryAsync(categoryIdentifier, [
-        {
-          identifier: "snooze_5",
-          buttonTitle: "5 min",
-          options: { opensAppToForeground: false },
-        },
-        {
-          identifier: "snooze_15",
-          buttonTitle: "15 min",
-          options: { opensAppToForeground: false },
-        },
-        {
-          identifier: "snooze_60",
-          buttonTitle: "1 hour",
-          options: { opensAppToForeground: false },
-        },
-        {
-          identifier: "done",
-          buttonTitle: "Done ✓",
-          options: { opensAppToForeground: false },
-        },
-      ]);
-    }
+    // Set up notification category with actions (works on both iOS and Android)
+    await Notifications.setNotificationCategoryAsync(categoryIdentifier, [
+      {
+        identifier: "snooze_5",
+        buttonTitle: "5 min",
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: "snooze_15",
+        buttonTitle: "15 min",
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: "snooze_60",
+        buttonTitle: "1 hour",
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: "done",
+        buttonTitle: "Done ✓",
+        options: { opensAppToForeground: false },
+      },
+    ]);
 
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
@@ -102,8 +98,7 @@ export async function scheduleReminderNotification(
           reminderId: reminder.id,
           type: "reminder",
         },
-        categoryIdentifier:
-          Platform.OS === "ios" ? categoryIdentifier : undefined,
+        categoryIdentifier: categoryIdentifier,
         sound: "default",
         badge: 1,
       },

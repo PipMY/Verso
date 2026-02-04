@@ -1,7 +1,7 @@
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -50,7 +50,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
   const [isReady, setIsReady] = useState(false);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
 
   useEffect(() => {
     async function checkOnboarding() {
@@ -61,8 +61,24 @@ function RootLayoutNav() {
     checkOnboarding();
   }, []);
 
+  // Re-check onboarding status when navigating away from onboarding
   useEffect(() => {
     if (!isReady) return;
+
+    const inOnboarding = segments[0] === "onboarding";
+
+    // If we just left onboarding, re-check the status
+    if (!inOnboarding && needsOnboarding) {
+      hasCompletedOnboarding().then((completed) => {
+        if (completed) {
+          setNeedsOnboarding(false);
+        }
+      });
+    }
+  }, [segments]);
+
+  useEffect(() => {
+    if (!isReady || needsOnboarding === null) return;
 
     const inOnboarding = segments[0] === "onboarding";
 
