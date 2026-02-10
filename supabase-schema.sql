@@ -54,6 +54,30 @@ CREATE POLICY "Users can delete own reminders"
     ON reminders FOR DELETE
     USING (auth.uid() = user_id);
 
+-- Create user_preferences table (syncs settings across devices)
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    preferences JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TEXT DEFAULT NOW()::TEXT
+);
+
+-- Enable RLS on user_preferences
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+
+-- Policies for user_preferences
+CREATE POLICY "Users can view own preferences"
+    ON user_preferences FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own preferences"
+    ON user_preferences FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own preferences"
+    ON user_preferences FOR UPDATE
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
 -- Enable real-time for reminders table
 ALTER PUBLICATION supabase_realtime ADD TABLE reminders;
 

@@ -1,7 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
+import * as Crypto from "expo-crypto";
 
-import { Reminder } from "@/types/reminder";
+import { Reminder, UserPreferences } from "@/types/reminder";
+
+// UUID v4 regex for validation
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(str: string): boolean {
+  return UUID_REGEX.test(str);
+}
 
 // TODO: Replace with your Supabase project credentials
 // Get these from: https://supabase.com/dashboard/project/YOUR_PROJECT/settings/api
@@ -193,8 +201,13 @@ export async function getUserInfo(): Promise<{
 
 // Convert local reminder to Supabase format
 function toSupabaseReminder(reminder: Reminder, userId: string) {
+  // Ensure we always have a valid UUID for the cloud id
+  let cloudId = reminder.syncId;
+  if (!cloudId || !isValidUUID(cloudId)) {
+    cloudId = Crypto.randomUUID();
+  }
   return {
-    id: reminder.syncId || reminder.id,
+    id: cloudId,
     user_id: userId,
     local_id: reminder.id,
     title: reminder.title,
@@ -284,30 +297,30 @@ export async function fetchRemindersFromCloud(): Promise<Reminder[]> {
 }
 
 // Upsert a reminder to Supabase
+// Returns the syncId used in the cloud, or null on failure
 export async function upsertReminderToCloud(
   reminder: Reminder,
-): Promise<boolean> {
-  if (!isSupabaseConfigured()) return false;
+): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
 
   const user = await getCurrentUser();
-  if (!user) return false;
+  if (!user) return null;
 
   try {
-    const { error } = await supabase
-      .from("reminders")
-      .upsert(toSupabaseReminder(reminder, user.id), {
-        onConflict: "id",
-      });
+    const supabaseData = toSupabaseReminder(reminder, user.id);
+    const { error } = await supabase.from("reminders").upsert(supabaseData, {
+      onConflict: "id",
+    });
 
     if (error) {
       console.error("Error upserting reminder:", error);
-      return false;
+      return null;
     }
 
-    return true;
+    return supabaseData.id;
   } catch (error) {
     console.error("Error upserting reminder:", error);
-    return false;
+    return null;
   }
 }
 
@@ -340,14 +353,14 @@ export async function deleteReminderFromCloud(
 }
 
 // Sync all local reminders to cloud
-// Only syncs reminders that don't have a syncId (new) or were created by current user
+// Returns updated reminders with syncIds assigned, or null on failure
 export async function syncRemindersToCloud(
   reminders: Reminder[],
-): Promise<boolean> {
-  if (!isSupabaseConfigured()) return false;
+): Promise<Reminder[] | null> {
+  if (!isSupabaseConfigured()) return null;
 
   const user = await getCurrentUser();
-  if (!user) return false;
+  if (!user) return null;
 
   try {
     // First, fetch existing reminder IDs from cloud for this user
@@ -361,8 +374,16 @@ export async function syncRemindersToCloud(
       existingReminders?.map((r) => r.local_id) || [],
     );
 
+    // Ensure all reminders have a valid UUID syncId
+    const updatedReminders = reminders.map((r) => {
+      if (!r.syncId || !isValidUUID(r.syncId)) {
+        return { ...r, syncId: Crypto.randomUUID() };
+      }
+      return r;
+    });
+
     // Filter reminders: only sync those that are new or belong to current user
-    const remindersToSync = reminders.filter((r) => {
+    const remindersToSync = updatedReminders.filter((r) => {
       // If it has a syncId that exists in cloud for this user, sync it
       if (r.syncId && existingSyncIds.has(r.syncId)) {
         return true;
@@ -371,18 +392,13 @@ export async function syncRemindersToCloud(
       if (existingLocalIds.has(r.id)) {
         return true;
       }
-      // If it has no syncId, it's a new local reminder - sync it
-      if (!r.syncId) {
-        return true;
-      }
-      // Otherwise, it belongs to a different user - skip it
-      console.log("Skipping reminder from different user:", r.title);
-      return false;
+      // If it doesn't exist in cloud yet, it's a new local reminder - sync it
+      return true;
     });
 
     if (remindersToSync.length === 0) {
       console.log("No reminders to sync for current user");
-      return true;
+      return updatedReminders;
     }
 
     const supabaseReminders = remindersToSync.map((r) =>
@@ -395,14 +411,14 @@ export async function syncRemindersToCloud(
 
     if (error) {
       console.error("Error syncing reminders:", error);
-      return false;
+      return null;
     }
 
     console.log("Synced", remindersToSync.length, "reminders to cloud");
-    return true;
+    return updatedReminders;
   } catch (error) {
     console.error("Error syncing reminders:", error);
-    return false;
+    return null;
   }
 }
 
@@ -458,4 +474,66 @@ export function subscribeToReminders(
       supabase.removeChannel(channel);
     },
   };
+}
+
+// ============ Preferences Sync ============
+
+// Fetch user preferences from cloud
+export async function fetchPreferencesFromCloud(): Promise<UserPreferences | null> {
+  if (!isSupabaseConfigured()) return null;
+
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from("user_preferences")
+      .select("preferences, updated_at")
+      .eq("user_id", user.id)
+      .single();
+
+    if (error) {
+      // PGRST116 = no rows found, that's fine for new users
+      if (error.code === "PGRST116") return null;
+      console.error("Error fetching preferences:", error);
+      return null;
+    }
+
+    return (data?.preferences as UserPreferences) || null;
+  } catch (error) {
+    console.error("Error fetching preferences:", error);
+    return null;
+  }
+}
+
+// Upsert user preferences to cloud
+export async function upsertPreferencesToCloud(
+  prefs: UserPreferences,
+): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  const user = await getCurrentUser();
+  if (!user) return false;
+
+  try {
+    const { error } = await supabase.from("user_preferences").upsert(
+      {
+        user_id: user.id,
+        preferences: prefs,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+
+    if (error) {
+      console.error("Error upserting preferences:", error);
+      return false;
+    }
+
+    console.log("Preferences synced to cloud");
+    return true;
+  } catch (error) {
+    console.error("Error upserting preferences:", error);
+    return false;
+  }
 }

@@ -1,12 +1,13 @@
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
 import { Brand, Colors } from "@/constants/theme";
@@ -165,8 +166,10 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <RemindersProvider>
-      <RootLayoutNav />
-    </RemindersProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <RemindersProvider>
+        <RootLayoutNav />
+      </RemindersProvider>
+    </GestureHandlerRootView>
   );
 }

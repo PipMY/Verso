@@ -24,6 +24,14 @@ export interface SnoozePreset {
   minutes: number;
 }
 
+export interface CustomRecurrencePreset {
+  id: string;
+  label: string;
+  type: RecurrenceType;
+  interval: number;
+  usageCount: number;
+}
+
 export interface Reminder {
   id: string;
   title: string;
@@ -56,6 +64,7 @@ export interface UserPreferences {
   defaultSnoozeMinutes: number;
   defaultRecurrence: RecurrenceType;
   customSnoozePresets: SnoozePreset[];
+  customRecurrencePresets: CustomRecurrencePreset[];
   defaultView: "today" | "upcoming" | "all";
   notificationSound: string;
   hapticFeedback: boolean;
@@ -82,6 +91,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   defaultSnoozeMinutes: 15,
   defaultRecurrence: "none",
   customSnoozePresets: DEFAULT_SNOOZE_PRESETS,
+  customRecurrencePresets: [],
   defaultView: "today",
   notificationSound: "default",
   hapticFeedback: true,

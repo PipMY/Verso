@@ -1,20 +1,50 @@
-import * as NotificationService from "@/services/notifications";
+import * as NotifeeService from "@/services/notifee";
 import * as Storage from "@/services/storage";
 import * as Supabase from "@/services/supabase";
 import {
-    DEFAULT_USER_PREFERENCES,
-    Reminder,
-    UserPreferences,
+  CustomRecurrencePreset,
+  DEFAULT_USER_PREFERENCES,
+  Reminder,
+  UserPreferences,
 } from "@/types/reminder";
 import { addDays, isToday, parseISO, startOfDay } from "date-fns";
 import React, {
-    createContext,
-    ReactNode,
-    useCallback,
-    useContext,
-    useEffect,
-    useState,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
 } from "react";
+
+// Merge custom recurrence presets from local and cloud
+// Keeps all unique presets, takes highest usage count for duplicates
+function mergeCustomPresets(
+  local: CustomRecurrencePreset[],
+  cloud: CustomRecurrencePreset[],
+): CustomRecurrencePreset[] {
+  const map = new Map<string, CustomRecurrencePreset>();
+
+  for (const preset of local) {
+    map.set(preset.id, preset);
+  }
+
+  for (const preset of cloud) {
+    const existing = map.get(preset.id);
+    if (!existing) {
+      map.set(preset.id, preset);
+    } else {
+      // Keep the one with higher usage count
+      map.set(preset.id, {
+        ...preset,
+        usageCount: Math.max(existing.usageCount, preset.usageCount),
+      });
+    }
+  }
+
+  return Array.from(map.values());
+}
 
 interface RemindersContextType {
   reminders: Reminder[];
@@ -36,6 +66,8 @@ interface RemindersContextType {
   upcomingReminders: Reminder[];
   completedReminders: Reminder[];
   overdueReminders: Reminder[];
+  // Bulk operations
+  clearCompleted: () => Promise<void>;
   // Preferences
   updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
   // Refresh & Sync
@@ -55,6 +87,19 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCloudEnabled, setIsCloudEnabled] = useState(false);
+
+  // Use refs for handlers that need access to latest state
+  const remindersRef = useRef<Reminder[]>([]);
+  const isCloudEnabledRef = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    remindersRef.current = reminders;
+  }, [reminders]);
+
+  useEffect(() => {
+    isCloudEnabledRef.current = isCloudEnabled;
+  }, [isCloudEnabled]);
 
   // Load data on mount
   useEffect(() => {
@@ -112,6 +157,44 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
           });
         }
 
+        // Fetch preferences from cloud and merge
+        try {
+          const cloudPrefs = await Supabase.fetchPreferencesFromCloud();
+          if (cloudPrefs) {
+            // Merge: cloud custom presets win, combine usage counts
+            const localPrefs = await Storage.getPreferences();
+            const mergedPresets = mergeCustomPresets(
+              localPrefs.customRecurrencePresets || [],
+              cloudPrefs.customRecurrencePresets || [],
+            );
+            const mergedPrefs = {
+              ...localPrefs,
+              ...cloudPrefs,
+              customRecurrencePresets: mergedPresets,
+            };
+            await Storage.savePreferences(mergedPrefs);
+            setPreferences(mergedPrefs);
+            console.log("Preferences synced from cloud");
+          } else {
+            // No cloud prefs yet — push local prefs up
+            const localPrefs = await Storage.getPreferences();
+            await Supabase.upsertPreferencesToCloud(localPrefs);
+            console.log("Local preferences pushed to cloud");
+          }
+        } catch (error) {
+          console.log("Preferences cloud fetch unavailable");
+        }
+
+        // Push all local reminders to cloud (assigns syncIds to old ones)
+        const currentReminders = await Storage.getReminders();
+        const updatedReminders =
+          await Supabase.syncRemindersToCloud(currentReminders);
+        if (updatedReminders) {
+          await Storage.saveReminders(updatedReminders);
+          setReminders(updatedReminders);
+          console.log("Pushed local reminders to cloud with syncIds assigned");
+        }
+
         // Subscribe to real-time changes
         Supabase.subscribeToReminders(
           handleRemoteInsert,
@@ -120,7 +203,8 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         );
       }
     } catch (error) {
-      console.error("Error initializing cloud sync:", error);
+      // Silently handle network errors - app works offline
+      console.log("Cloud sync unavailable - working offline");
     }
   };
 
@@ -194,19 +278,29 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (error) {
-      console.error("Error syncing from cloud:", error);
+      // Silently handle - app works offline
+      console.log("Cloud fetch unavailable - using local data");
     } finally {
       setIsSyncing(false);
     }
   };
 
   const syncToCloud = async (reminder: Reminder) => {
+    // Only sync if cloud is enabled
     if (!isCloudEnabled) return;
 
     try {
-      await Supabase.upsertReminderToCloud(reminder);
+      const syncId = await Supabase.upsertReminderToCloud(reminder);
+      // If we got a new syncId back, save it to the reminder
+      if (syncId && syncId !== reminder.syncId) {
+        await Storage.updateReminder(reminder.id, { syncId });
+        setReminders((prev) =>
+          prev.map((r) => (r.id === reminder.id ? { ...r, syncId } : r)),
+        );
+      }
     } catch (error) {
-      console.error("Error syncing to cloud:", error);
+      // Silently fail - data is saved locally, will sync when online
+      console.log("Cloud sync deferred - working offline");
     }
   };
 
@@ -215,16 +309,38 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
     setIsSyncing(true);
     try {
-      // Push all local reminders to cloud
-      await Supabase.syncRemindersToCloud(reminders);
+      // Push all local reminders to cloud (returns reminders with syncIds assigned)
+      const updatedReminders = await Supabase.syncRemindersToCloud(reminders);
+      if (updatedReminders) {
+        // Save updated syncIds back locally
+        setReminders(updatedReminders);
+        await Storage.saveReminders(updatedReminders);
+      }
+      // Push preferences to cloud
+      await Supabase.upsertPreferencesToCloud(preferences);
       // Pull any remote changes
       await syncFromCloud();
+      // Pull preferences from cloud
+      const cloudPrefs = await Supabase.fetchPreferencesFromCloud();
+      if (cloudPrefs) {
+        const mergedPresets = mergeCustomPresets(
+          preferences.customRecurrencePresets || [],
+          cloudPrefs.customRecurrencePresets || [],
+        );
+        const mergedPrefs = {
+          ...preferences,
+          ...cloudPrefs,
+          customRecurrencePresets: mergedPresets,
+        };
+        await Storage.savePreferences(mergedPrefs);
+        setPreferences(mergedPrefs);
+      }
     } catch (error) {
-      console.error("Error during manual sync:", error);
+      console.log("Sync failed - will retry when online");
     } finally {
       setIsSyncing(false);
     }
-  }, [reminders]);
+  }, [reminders, preferences]);
 
   const loadData = async () => {
     try {
@@ -243,26 +359,75 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   };
 
   const setupNotifications = async () => {
-    await NotificationService.requestNotificationPermissions();
+    await NotifeeService.setupNotifications();
 
-    // Handle notification responses
-    NotificationService.addNotificationResponseListener(async (response) => {
-      const { reminderId } = response.notification.request.content.data as {
-        reminderId?: string;
-      };
-      const actionId = response.actionIdentifier;
+    // Set up Notifee event handlers with refs for latest state access
+    NotifeeService.setupNotificationEventHandler({
+      onSnooze: async (
+        reminderId: string,
+        minutes: number,
+        title: string,
+        notes?: string,
+      ) => {
+        console.log(`Snoozing ${reminderId} for ${minutes} minutes`);
 
-      if (!reminderId) return;
+        // Update the reminder's snoozed time
+        const snoozedUntil = new Date(
+          Date.now() + minutes * 60 * 1000,
+        ).toISOString();
+        const updated = await Storage.updateReminder(reminderId, {
+          snoozedUntil,
+        });
 
-      if (actionId === "done") {
-        await completeReminderHandler(reminderId);
-      } else {
-        const snoozeMinutes =
-          NotificationService.getSnoozeMinutesFromAction(actionId);
-        if (snoozeMinutes) {
-          await snoozeReminderHandler(reminderId, snoozeMinutes);
+        if (updated) {
+          setReminders((prev) =>
+            prev.map((r) => (r.id === reminderId ? { ...r, snoozedUntil } : r)),
+          );
+
+          // Schedule new notification
+          await NotifeeService.scheduleSnoozeNotification(
+            reminderId,
+            title,
+            notes,
+            minutes,
+          );
+
+          // Sync to cloud if enabled
+          if (isCloudEnabledRef.current) {
+            await Supabase.upsertReminderToCloud(updated);
+          }
         }
-      }
+      },
+
+      onDone: async (reminderId: string) => {
+        console.log(`Completing reminder ${reminderId} from notification`);
+
+        const updated = await Storage.completeReminder(reminderId);
+        if (updated) {
+          setReminders((prev) =>
+            prev.map((r) =>
+              r.id === reminderId
+                ? {
+                    ...r,
+                    isCompleted: true,
+                    completedAt: new Date().toISOString(),
+                  }
+                : r,
+            ),
+          );
+
+          // Sync to cloud if enabled
+          if (isCloudEnabledRef.current) {
+            await Supabase.upsertReminderToCloud(updated);
+          }
+        }
+      },
+
+      onTap: (reminderId: string) => {
+        console.log(`User tapped notification for ${reminderId}`);
+        // Could navigate to reminder detail here if needed
+        NotifeeService.clearBadgeCount();
+      },
     });
   };
 
@@ -278,7 +443,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
       // Schedule notification
       const notificationId =
-        await NotificationService.scheduleReminderNotification(newReminder);
+        await NotifeeService.scheduleReminderNotification(newReminder);
       if (notificationId) {
         await Storage.updateReminder(newReminder.id, { notificationId });
         newReminder.notificationId = notificationId;
@@ -301,7 +466,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         // Reschedule notification if datetime changed
         if (updates.datetime || updates.snoozedUntil) {
           const notificationId =
-            await NotificationService.scheduleReminderNotification(updated);
+            await NotifeeService.scheduleReminderNotification(updated);
           if (notificationId) {
             await Storage.updateReminder(id, { notificationId });
             updated.notificationId = notificationId;
@@ -320,7 +485,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const reminder = reminders.find((r) => r.id === id);
       if (reminder?.notificationId) {
-        await NotificationService.cancelNotification(reminder.notificationId);
+        await NotifeeService.cancelNotification(reminder.notificationId);
       }
 
       // Delete from cloud first (need syncId before local delete)
@@ -338,7 +503,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const reminder = reminders.find((r) => r.id === id);
       if (reminder?.notificationId) {
-        await NotificationService.cancelNotification(reminder.notificationId);
+        await NotifeeService.cancelNotification(reminder.notificationId);
       }
       const updated = await Storage.completeReminder(id);
       const completedReminder = {
@@ -365,7 +530,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       if (updated) {
         // Reschedule notification
         const notificationId =
-          await NotificationService.scheduleReminderNotification(updated);
+          await NotifeeService.scheduleReminderNotification(updated);
         if (notificationId) {
           await Storage.updateReminder(id, { notificationId });
         }
@@ -397,7 +562,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
       const updated = await Storage.updateReminder(id, { snoozedUntil });
       if (updated) {
         const notificationId =
-          await NotificationService.scheduleReminderNotification(updated);
+          await NotifeeService.scheduleReminderNotification(updated);
         if (notificationId) {
           await Storage.updateReminder(id, { notificationId });
         }
@@ -420,13 +585,47 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     [isCloudEnabled],
   );
 
+  const clearCompletedHandler = useCallback(async () => {
+    const completed = reminders.filter((r) => r.isCompleted);
+
+    // Cancel any notifications for completed reminders
+    for (const r of completed) {
+      if (r.notificationId) {
+        await NotifeeService.cancelNotification(r.notificationId);
+      }
+    }
+
+    // Delete from cloud
+    if (isCloudEnabled) {
+      for (const r of completed) {
+        if (r.syncId) {
+          await Supabase.deleteReminderFromCloud(r.syncId);
+        }
+      }
+    }
+
+    // Remove from local storage and state
+    const remaining = reminders.filter((r) => !r.isCompleted);
+    await Storage.saveReminders(remaining);
+    setReminders(remaining);
+  }, [reminders, isCloudEnabled]);
+
   const updatePreferencesHandler = useCallback(
     async (updates: Partial<UserPreferences>) => {
       const updated = { ...preferences, ...updates };
       await Storage.savePreferences(updated);
       setPreferences(updated);
+
+      // Sync preferences to cloud
+      if (isCloudEnabled) {
+        try {
+          await Supabase.upsertPreferencesToCloud(updated);
+        } catch (error) {
+          console.log("Preferences cloud sync deferred - working offline");
+        }
+      }
     },
-    [preferences],
+    [preferences, isCloudEnabled],
   );
 
   // Computed filtered lists
@@ -514,6 +713,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         upcomingReminders,
         completedReminders,
         overdueReminders,
+        clearCompleted: clearCompletedHandler,
         updatePreferences: updatePreferencesHandler,
         refresh,
         syncNow,

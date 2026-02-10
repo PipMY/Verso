@@ -13,11 +13,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { format, isPast, isToday, isTomorrow, parseISO } from "date-fns";
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
+import {
+    Alert,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+    ViewStyle,
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+    runOnJS,
     useAnimatedStyle,
     useSharedValue,
-    withSpring
+    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 
 interface ReminderCardProps {
@@ -25,25 +35,71 @@ interface ReminderCardProps {
   onPress: () => void;
   onComplete: () => void;
   onSnooze: () => void;
+  onDelete?: () => void;
+  onUncomplete?: () => void;
   style?: ViewStyle;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const SWIPE_THRESHOLD = -80;
 
 export function ReminderCard({
   reminder,
   onPress,
   onComplete,
   onSnooze,
+  onDelete,
+  onUncomplete,
   style,
 }: ReminderCardProps) {
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
   const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
 
   const date = parseISO(reminder.snoozedUntil || reminder.datetime);
   const isOverdue = isPast(date) && !reminder.isCompleted;
   const priorityColor = PriorityColors[reminder.priority];
+
+  const triggerDelete = () => {
+    Alert.alert(
+      "Delete Reminder",
+      `Are you sure you want to delete "${reminder.title}"?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => {
+            translateX.value = withSpring(0);
+          },
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            onDelete?.();
+          },
+        },
+      ],
+    );
+  };
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .onUpdate((event) => {
+      if (event.translationX < 0) {
+        translateX.value = Math.max(event.translationX, -120);
+      }
+    })
+    .onEnd(() => {
+      if (translateX.value < SWIPE_THRESHOLD && onDelete) {
+        translateX.value = withSpring(-100);
+        runOnJS(triggerDelete)();
+      } else {
+        translateX.value = withSpring(0);
+      }
+    });
 
   const handleComplete = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -55,8 +111,12 @@ export function ReminderCard({
     onPress();
   };
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { translateX: translateX.value }],
+  }));
+
+  const deleteButtonStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value < -20 ? withTiming(1) : withTiming(0),
   }));
 
   const formatDate = () => {
@@ -69,7 +129,7 @@ export function ReminderCard({
     }
   };
 
-  return (
+  const cardContent = (
     <AnimatedPressable
       style={[
         styles.container,
@@ -80,7 +140,7 @@ export function ReminderCard({
         },
         reminder.isCompleted && styles.completedContainer,
         style,
-        animatedStyle,
+        cardStyle,
       ]}
       onPress={handlePress}
       onPressIn={() => {
@@ -171,8 +231,8 @@ export function ReminderCard({
         )}
       </View>
 
-      {/* Snooze button */}
-      {!reminder.isCompleted && (
+      {/* Snooze button or Undo button */}
+      {!reminder.isCompleted ? (
         <Pressable
           style={[
             styles.snoozeButton,
@@ -186,12 +246,55 @@ export function ReminderCard({
         >
           <Ionicons name="alarm-outline" size={18} color={Brand.primary} />
         </Pressable>
-      )}
+      ) : onUncomplete ? (
+        <Pressable
+          style={[
+            styles.snoozeButton,
+            { backgroundColor: colors.backgroundTertiary },
+          ]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onUncomplete();
+          }}
+          hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+        >
+          <Ionicons name="arrow-undo-outline" size={18} color={Brand.warning} />
+        </Pressable>
+      ) : null}
     </AnimatedPressable>
   );
+
+  // If delete is enabled, wrap in swipe container
+  if (onDelete) {
+    return (
+      <View style={styles.swipeContainer}>
+        <Animated.View style={[styles.deleteAction, deleteButtonStyle]}>
+          <Ionicons name="trash" size={24} color="#fff" />
+        </Animated.View>
+        <GestureDetector gesture={panGesture}>{cardContent}</GestureDetector>
+      </View>
+    );
+  }
+
+  return cardContent;
 }
 
 const styles = StyleSheet.create({
+  swipeContainer: {
+    position: "relative",
+  },
+  deleteAction: {
+    position: "absolute",
+    right: Spacing.md + 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    width: 60,
+    backgroundColor: Brand.error,
+    borderRadius: BorderRadius.lg,
+    marginVertical: Spacing.xs,
+  },
   container: {
     flexDirection: "row",
     alignItems: "center",

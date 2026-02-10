@@ -4,23 +4,23 @@ import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  BorderRadius,
-  Brand,
-  Colors,
-  FontSizes,
-  Spacing,
+    BorderRadius,
+    Brand,
+    Colors,
+    FontSizes,
+    Spacing,
 } from "@/constants/theme";
 import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -36,6 +36,7 @@ export default function SettingsScreen() {
   const {
     preferences,
     updatePreferences,
+    clearCompleted,
     refresh,
     isSyncing,
     isCloudEnabled,
@@ -110,8 +111,7 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            // Implementation would go here
-            await refresh();
+            await clearCompleted();
           },
         },
       ],
