@@ -418,6 +418,17 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
+      {/* Rapid Reminder FAB */}
+      <Pressable
+        style={[styles.rapidFab, { backgroundColor: Brand.warning }]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          router.push("/rapid-reminder");
+        }}
+      >
+        <Ionicons name="flash" size={28} color="#fff" />
+      </Pressable>
+
       {/* FAB */}
       <FloatingActionButton onPress={handleAddReminder} />
 
@@ -510,5 +521,20 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     fontSize: FontSizes.md,
+  },
+  rapidFab: {
+    position: "absolute",
+    bottom: Spacing.xl,
+    right: Spacing.lg + 60 + Spacing.md,
+    width: 60,
+    height: 60,
+    borderRadius: BorderRadius.full,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: Brand.warning,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
 });

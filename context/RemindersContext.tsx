@@ -1,4 +1,10 @@
 import * as NotifeeService from "@/services/notifee";
+import {
+  addCustomerInfoListener,
+  getFeatureAccess,
+  getSubscriptionStatus,
+  initializeRevenueCat,
+} from "@/services/revenuecat";
 import * as Storage from "@/services/storage";
 import * as Supabase from "@/services/supabase";
 import {
@@ -51,6 +57,8 @@ interface RemindersContextType {
   isLoading: boolean;
   isSyncing: boolean;
   isCloudEnabled: boolean;
+  isProUser: boolean;
+  featureAccess: ReturnType<typeof getFeatureAccess>;
   preferences: UserPreferences;
   // CRUD operations
   addReminder: (
@@ -87,10 +95,13 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCloudEnabled, setIsCloudEnabled] = useState(false);
+  const [isProUser, setIsProUser] = useState(false);
+  const [featureAccess, setFeatureAccess] = useState(getFeatureAccess(false));
 
   // Use refs for handlers that need access to latest state
   const remindersRef = useRef<Reminder[]>([]);
   const isCloudEnabledRef = useRef(false);
+  const hasInitializedCloudSyncRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -105,8 +116,49 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadData();
     setupNotifications();
-    initializeCloudSync();
+    let unsubscribe = () => {};
+
+    (async () => {
+      try {
+        await initializeRevenueCat();
+        const status = await getSubscriptionStatus();
+        const access = getFeatureAccess(status.isProUser);
+        setIsProUser(status.isProUser);
+        setFeatureAccess(access);
+
+        if (access.cloudSync) {
+          await initializeCloudSyncIfNeeded(true);
+        }
+
+        unsubscribe = addCustomerInfoListener(async () => {
+          const updatedStatus = await getSubscriptionStatus();
+          const updatedAccess = getFeatureAccess(updatedStatus.isProUser);
+          setIsProUser(updatedStatus.isProUser);
+          setFeatureAccess(updatedAccess);
+
+          if (updatedAccess.cloudSync) {
+            await initializeCloudSyncIfNeeded(true);
+          } else {
+            setIsCloudEnabled(false);
+          }
+        });
+      } catch (error) {
+        console.log("RevenueCat not available", error);
+      }
+    })();
+
+    return () => {
+      try {
+        unsubscribe();
+      } catch {}
+    };
   }, []);
+
+  const initializeCloudSyncIfNeeded = async (allowCloudSync: boolean) => {
+    if (!allowCloudSync || hasInitializedCloudSyncRef.current) return;
+    hasInitializedCloudSyncRef.current = true;
+    await initializeCloudSync();
+  };
 
   const initializeCloudSync = async () => {
     if (!Supabase.isSupabaseConfigured()) {
@@ -251,6 +303,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncFromCloud = async () => {
+    if (!featureAccess.cloudSync) return;
     if (!isCloudEnabled && !Supabase.isSupabaseConfigured()) return;
 
     try {
@@ -287,7 +340,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
   const syncToCloud = async (reminder: Reminder) => {
     // Only sync if cloud is enabled
-    if (!isCloudEnabled) return;
+    if (!featureAccess.cloudSync || !isCloudEnabled) return;
 
     try {
       const syncId = await Supabase.upsertReminderToCloud(reminder);
@@ -305,6 +358,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
   };
 
   const syncNow = useCallback(async () => {
+    if (!featureAccess.cloudSync) return;
     if (!Supabase.isSupabaseConfigured()) return;
 
     setIsSyncing(true);
@@ -340,7 +394,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [reminders, preferences]);
+  }, [reminders, preferences, featureAccess]);
 
   const loadData = async () => {
     try {
@@ -439,6 +493,13 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
     async (
       reminder: Omit<Reminder, "id" | "createdAt" | "updatedAt" | "syncId">,
     ): Promise<Reminder> => {
+      if (
+        featureAccess.maxReminders !== Infinity &&
+        remindersRef.current.length >= featureAccess.maxReminders
+      ) {
+        throw new Error("LIMIT_REACHED");
+      }
+
       const newReminder = await Storage.addReminder(reminder);
 
       // Schedule notification
@@ -456,7 +517,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
       return newReminder;
     },
-    [isCloudEnabled],
+    [featureAccess, isCloudEnabled],
   );
 
   const updateReminderHandler = useCallback(
@@ -612,6 +673,12 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
 
   const updatePreferencesHandler = useCallback(
     async (updates: Partial<UserPreferences>) => {
+      if (
+        updates.customRecurrencePresets &&
+        !featureAccess.unlimitedRecurrence
+      ) {
+        throw new Error("PRO_REQUIRED");
+      }
       const updated = { ...preferences, ...updates };
       await Storage.savePreferences(updated);
       setPreferences(updated);
@@ -625,7 +692,7 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [preferences, isCloudEnabled],
+    [preferences, isCloudEnabled, featureAccess],
   );
 
   // Computed filtered lists
@@ -702,6 +769,8 @@ export function RemindersProvider({ children }: { children: ReactNode }) {
         isLoading,
         isSyncing,
         isCloudEnabled,
+        isProUser,
+        featureAccess,
         preferences,
         addReminder: addReminderHandler,
         updateReminder: updateReminderHandler,

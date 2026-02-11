@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Image,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -42,6 +43,8 @@ export default function SettingsScreen() {
     isSyncing,
     isCloudEnabled,
     syncNow,
+    isProUser,
+    featureAccess,
   } = useReminders();
 
   const [hapticEnabled, setHapticEnabled] = useState(
@@ -99,6 +102,11 @@ export default function SettingsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await Notifications.sendTestNotification();
     Alert.alert("Test Sent", "A test notification has been sent!");
+  };
+
+  const handleUpgrade = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push("/paywall");
   };
 
   const handleClearCompleted = () => {
@@ -205,9 +213,10 @@ export default function SettingsScreen() {
           entering={FadeInDown.duration(400).delay(100)}
           style={styles.appInfo}
         >
-          <View style={[styles.appIcon, { backgroundColor: Brand.primary }]}>
-            <Ionicons name="notifications" size={32} color="#fff" />
-          </View>
+          <Image
+            source={require("@/assets/images/logo.png")}
+            style={styles.appLogo}
+          />
           <Text style={[styles.appName, { color: colors.text }]}>Verso</Text>
           <Text style={[styles.appVersion, { color: colors.textMuted }]}>
             Version 1.0.0
@@ -261,15 +270,23 @@ export default function SettingsScreen() {
 
           <SettingRow
             icon="cloud-outline"
-            iconColor={isCloudEnabled ? Brand.success : Brand.info}
+            iconColor={
+              featureAccess.cloudSync
+                ? isCloudEnabled
+                  ? Brand.success
+                  : Brand.info
+                : Brand.warning
+            }
             title="Cloud Sync"
             subtitle={
-              isCloudEnabled
-                ? "Connected - syncing across devices"
-                : "Not configured - local only"
+              featureAccess.cloudSync
+                ? isCloudEnabled
+                  ? "Connected - syncing across devices"
+                  : "Not configured - local only"
+                : "Pro required to sync across devices"
             }
             right={
-              isCloudEnabled ? (
+              featureAccess.cloudSync && isCloudEnabled ? (
                 <View style={styles.syncStatus}>
                   {isSyncing ? (
                     <ActivityIndicator size="small" color={Brand.primary} />
@@ -283,9 +300,10 @@ export default function SettingsScreen() {
                 </View>
               ) : undefined
             }
+            onPress={!featureAccess.cloudSync ? handleUpgrade : undefined}
           />
 
-          {isCloudEnabled && (
+          {featureAccess.cloudSync && isCloudEnabled && (
             <SettingRow
               icon="sync-outline"
               iconColor={Brand.primary}
@@ -303,7 +321,7 @@ export default function SettingsScreen() {
           )}
 
           {/* Account Info */}
-          {userInfo?.isAnonymous ? (
+          {featureAccess.cloudSync && userInfo?.isAnonymous ? (
             <SettingRow
               icon="person-add-outline"
               iconColor={Brand.secondary}
@@ -311,7 +329,7 @@ export default function SettingsScreen() {
               subtitle="Add email to sync across devices"
               onPress={() => router.push("/auth")}
             />
-          ) : userInfo?.email ? (
+          ) : featureAccess.cloudSync && userInfo?.email ? (
             <>
               <SettingRow
                 icon="person-outline"
@@ -327,13 +345,21 @@ export default function SettingsScreen() {
                 onPress={handleSignOut}
               />
             </>
-          ) : (
+          ) : featureAccess.cloudSync ? (
             <SettingRow
               icon="log-in-outline"
               iconColor={Brand.primary}
               title="Sign In"
               subtitle="Sign in to sync across devices"
               onPress={() => router.push("/auth")}
+            />
+          ) : (
+            <SettingRow
+              icon="lock-closed-outline"
+              iconColor={Brand.warning}
+              title="Unlock Cloud Sync"
+              subtitle="Upgrade to Pro to enable sync and account linking"
+              onPress={handleUpgrade}
             />
           )}
         </Animated.View>
@@ -355,15 +381,12 @@ export default function SettingsScreen() {
                 borderColor: Brand.primary,
               },
             ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push("/paywall");
-            }}
+            onPress={handleUpgrade}
           >
             <View style={styles.premiumHeader}>
               <Ionicons name="star" size={24} color={Brand.primary} />
               <Text style={[styles.premiumTitle, { color: colors.text }]}>
-                Unlock Verso Pro
+                {isProUser ? "Verso Pro Active" : "Unlock Verso Pro"}
               </Text>
             </View>
             <Text
@@ -372,13 +395,16 @@ export default function SettingsScreen() {
                 { color: colors.textSecondary },
               ]}
             >
-              Get unlimited reminders, cloud sync, custom snooze times, and
-              more!
+              {isProUser
+                ? "Thanks for supporting Verso. Manage your plan and restore purchases."
+                : "Get unlimited reminders, cloud sync, custom snooze times, and more!"}
             </Text>
             <View
               style={[styles.premiumButton, { backgroundColor: Brand.primary }]}
             >
-              <Text style={styles.premiumButtonText}>View Plans</Text>
+              <Text style={styles.premiumButtonText}>
+                {isProUser ? "Manage Plan" : "View Plans"}
+              </Text>
             </View>
           </Pressable>
         </Animated.View>
@@ -483,6 +509,12 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  appLogo: {
+    width: 72,
+    height: 72,
+    borderRadius: BorderRadius.lg,
     marginBottom: Spacing.md,
   },
   appName: {

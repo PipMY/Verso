@@ -1,14 +1,14 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import Purchases, {
-    CustomerInfo,
-    LOG_LEVEL,
-    PurchasesPackage,
+  CustomerInfo,
+  LOG_LEVEL,
+  PurchasesPackage,
 } from "react-native-purchases";
 
 const API_KEYS = {
-  ios: "test_mqFVmMFiTnlObipFTNbincfOHmD",
-  android: "test_mqFVmMFiTnlObipFTNbincfOHmD",
+  ios: "goog_ABbAEtFpXrWKjaGbEhLbwfFHDhi",
+  android: "goog_ABbAEtFpXrWKjaGbEhLbwfFHDhi",
 };
 
 export interface SubscriptionStatus {
@@ -111,8 +111,10 @@ export async function restorePurchases(): Promise<CustomerInfo | null> {
 // Get current subscription status
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
   if (!revenueCatInitialized) {
-    // In Expo Go, return free user status
-    return { isProUser: false };
+    // DEV OVERRIDE: temporarily grant Pro in Expo Go for testing
+
+    // CHANGE TO FALSE
+    return { isProUser: true };
   }
 
   try {

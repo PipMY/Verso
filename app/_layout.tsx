@@ -111,6 +111,15 @@ function RootLayoutNav() {
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
+          name="rapid-reminder"
+          options={{
+            presentation: "modal",
+            title: "Rapid Reminder",
+            headerStyle: { backgroundColor: Colors.dark.backgroundSecondary },
+            headerTintColor: Colors.dark.text,
+          }}
+        />
+        <Stack.Screen
           name="modal"
           options={{
             presentation: "modal",

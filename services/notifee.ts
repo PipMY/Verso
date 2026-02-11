@@ -1,14 +1,37 @@
-import notifee, {
-    AndroidImportance,
-    AndroidStyle,
-    AuthorizationStatus,
-    EventType,
-    TimestampTrigger,
-    TriggerType,
-} from "@notifee/react-native";
 import { differenceInSeconds, parseISO } from "date-fns";
 
 import { Reminder } from "@/types/reminder";
+
+// ============================================================================
+// SAFE NOTIFEE IMPORT — gracefully no-ops in Expo Go
+// ============================================================================
+
+let notifee: any = null;
+let TriggerType: any = {};
+let AndroidImportance: any = {};
+let AndroidStyle: any = {};
+let AuthorizationStatus: any = { AUTHORIZED: 1 };
+let EventType: any = {};
+
+let isNotifeeAvailable = false;
+
+// The @notifee/react-native package throws at module evaluation time if the
+// native module isn't linked (Expo Go). We isolate the require in a separate
+// file so the error is thrown during that file's evaluation and can be caught.
+try {
+  const loader = require("./notifee-loader");
+  notifee = loader.notifee;
+  TriggerType = loader.TriggerType;
+  AndroidImportance = loader.AndroidImportance;
+  AndroidStyle = loader.AndroidStyle;
+  AuthorizationStatus = loader.AuthorizationStatus;
+  EventType = loader.EventType;
+  isNotifeeAvailable = true;
+} catch (_e) {
+  console.log(
+    "[Notifee] Native module not available (Expo Go?). Notifications disabled.",
+  );
+}
 
 // ============================================================================
 // CONSTANTS
@@ -21,6 +44,11 @@ const CHANNEL_ID = "reminders";
 // ============================================================================
 
 export async function setupNotifications(): Promise<boolean> {
+  if (!isNotifeeAvailable) {
+    console.log("[Notifee] Skipping setup — native module not available");
+    return false;
+  }
+
   // Request permissions
   const settings = await notifee.requestPermission();
 
@@ -53,6 +81,8 @@ export async function scheduleNotification(
   datetime: Date,
   notes?: string,
 ): Promise<string | null> {
+  if (!isNotifeeAvailable) return null;
+
   try {
     const secondsUntilTrigger = differenceInSeconds(datetime, new Date());
 
@@ -61,7 +91,7 @@ export async function scheduleNotification(
       return null;
     }
 
-    const trigger: TimestampTrigger = {
+    const trigger: any = {
       type: TriggerType.TIMESTAMP,
       timestamp: datetime.getTime(),
     };
@@ -115,6 +145,8 @@ export async function scheduleNotification(
 export async function scheduleReminderNotification(
   reminder: Reminder,
 ): Promise<string | null> {
+  if (!isNotifeeAvailable) return null;
+
   try {
     const triggerDate = parseISO(reminder.snoozedUntil || reminder.datetime);
     const secondsUntilTrigger = differenceInSeconds(triggerDate, new Date());
@@ -129,7 +161,7 @@ export async function scheduleReminderNotification(
       await cancelNotification(reminder.notificationId);
     }
 
-    const trigger: TimestampTrigger = {
+    const trigger: any = {
       type: TriggerType.TIMESTAMP,
       timestamp: triggerDate.getTime(),
     };
@@ -191,8 +223,10 @@ export async function scheduleSnoozeNotification(
   notes: string | undefined,
   snoozeMinutes: number,
 ): Promise<string | null> {
+  if (!isNotifeeAvailable) return null;
+
   try {
-    const trigger: TimestampTrigger = {
+    const trigger: any = {
       type: TriggerType.TIMESTAMP,
       timestamp: Date.now() + snoozeMinutes * 60 * 1000,
     };
@@ -251,6 +285,8 @@ export async function scheduleSnoozeNotification(
 export async function cancelNotification(
   notificationId: string,
 ): Promise<void> {
+  if (!isNotifeeAvailable) return;
+
   try {
     await notifee.cancelNotification(notificationId);
   } catch (error) {
@@ -259,6 +295,8 @@ export async function cancelNotification(
 }
 
 export async function cancelAllNotifications(): Promise<void> {
+  if (!isNotifeeAvailable) return;
+
   try {
     await notifee.cancelAllNotifications();
   } catch (error) {
@@ -303,71 +341,77 @@ export function setupNotificationEventHandler(handlers: {
   onDone: (reminderId: string) => Promise<void>;
   onTap: (reminderId: string) => void;
 }): void {
-  notifee.onForegroundEvent(async ({ type, detail }) => {
-    const { notification, pressAction, input } = detail;
+  if (!isNotifeeAvailable) return;
 
-    if (!notification?.data?.reminderId) return;
+  notifee.onForegroundEvent(
+    async ({ type, detail }: { type: any; detail: any }) => {
+      const { notification, pressAction, input } = detail;
 
-    const reminderId = notification.data.reminderId as string;
-    const title = (notification.data.reminderTitle as string) || "Reminder";
-    const notes = notification.data.reminderNotes as string | undefined;
+      if (!notification?.data?.reminderId) return;
 
-    if (type === EventType.ACTION_PRESS && pressAction) {
-      // Dismiss the notification first
-      if (notification.id) {
-        await notifee.cancelNotification(notification.id);
+      const reminderId = notification.data.reminderId as string;
+      const title = (notification.data.reminderTitle as string) || "Reminder";
+      const notes = notification.data.reminderNotes as string | undefined;
+
+      if (type === EventType.ACTION_PRESS && pressAction) {
+        // Dismiss the notification first
+        if (notification.id) {
+          await notifee.cancelNotification(notification.id);
+        }
+
+        switch (pressAction.id) {
+          case "snooze_5":
+            await handlers.onSnooze(reminderId, 5, title, notes);
+            break;
+          case "snooze_15":
+            await handlers.onSnooze(reminderId, 15, title, notes);
+            break;
+          case "snooze_custom":
+            const minutes = parseCustomSnoozeInput(input);
+            await handlers.onSnooze(reminderId, minutes, title, notes);
+            break;
+          case "done":
+            await handlers.onDone(reminderId);
+            break;
+        }
+      } else if (type === EventType.PRESS) {
+        handlers.onTap(reminderId);
       }
-
-      switch (pressAction.id) {
-        case "snooze_5":
-          await handlers.onSnooze(reminderId, 5, title, notes);
-          break;
-        case "snooze_15":
-          await handlers.onSnooze(reminderId, 15, title, notes);
-          break;
-        case "snooze_custom":
-          const minutes = parseCustomSnoozeInput(input);
-          await handlers.onSnooze(reminderId, minutes, title, notes);
-          break;
-        case "done":
-          await handlers.onDone(reminderId);
-          break;
-      }
-    } else if (type === EventType.PRESS) {
-      handlers.onTap(reminderId);
-    }
-  });
+    },
+  );
 
   // Background event handler
-  notifee.onBackgroundEvent(async ({ type, detail }) => {
-    const { notification, pressAction, input } = detail;
+  notifee.onBackgroundEvent(
+    async ({ type, detail }: { type: any; detail: any }) => {
+      const { notification, pressAction, input } = detail;
 
-    if (!notification?.data?.reminderId) return;
+      if (!notification?.data?.reminderId) return;
 
-    const reminderId = notification.data.reminderId as string;
-    const title = (notification.data.reminderTitle as string) || "Reminder";
-    const notes = notification.data.reminderNotes as string | undefined;
+      const reminderId = notification.data.reminderId as string;
+      const title = (notification.data.reminderTitle as string) || "Reminder";
+      const notes = notification.data.reminderNotes as string | undefined;
 
-    if (type === EventType.ACTION_PRESS && pressAction) {
-      // Dismiss the notification first
-      if (notification.id) {
-        await notifee.cancelNotification(notification.id);
+      if (type === EventType.ACTION_PRESS && pressAction) {
+        // Dismiss the notification first
+        if (notification.id) {
+          await notifee.cancelNotification(notification.id);
+        }
+
+        switch (pressAction.id) {
+          case "done":
+            await handlers.onDone(reminderId);
+            break;
+          case "snooze_5":
+            await handlers.onSnooze(reminderId, 5, title, notes);
+            break;
+          case "snooze_custom":
+            const minutes = parseCustomSnoozeInput(input);
+            await handlers.onSnooze(reminderId, minutes, title, notes);
+            break;
+        }
       }
-
-      switch (pressAction.id) {
-        case "done":
-          await handlers.onDone(reminderId);
-          break;
-        case "snooze_5":
-          await handlers.onSnooze(reminderId, 5, title, notes);
-          break;
-        case "snooze_custom":
-          const minutes = parseCustomSnoozeInput(input);
-          await handlers.onSnooze(reminderId, minutes, title, notes);
-          break;
-      }
-    }
-  });
+    },
+  );
 }
 
 // ============================================================================
@@ -375,6 +419,8 @@ export function setupNotificationEventHandler(handlers: {
 // ============================================================================
 
 export async function sendTestNotification(): Promise<void> {
+  if (!isNotifeeAvailable) return;
+
   await notifee.displayNotification({
     title: "Test Reminder",
     body: "This is a test notification from Verso!",
@@ -408,6 +454,8 @@ export async function sendTestNotification(): Promise<void> {
 }
 
 export async function clearBadgeCount(): Promise<void> {
+  if (!isNotifeeAvailable) return;
+
   try {
     await notifee.setBadgeCount(0);
   } catch (error) {
@@ -416,5 +464,7 @@ export async function clearBadgeCount(): Promise<void> {
 }
 
 export async function getScheduledNotifications() {
+  if (!isNotifeeAvailable) return [];
+
   return notifee.getTriggerNotifications();
 }

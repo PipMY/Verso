@@ -1,48 +1,48 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
-    DateTimePickerEvent,
+  DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import {
-    addDays,
-    addHours,
-    format,
-    isBefore,
-    setHours,
-    setMinutes,
+  addDays,
+  addHours,
+  format,
+  isBefore,
+  setHours,
+  setMinutes,
 } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
-    Alert,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableWithoutFeedback,
-    View,
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-    BorderRadius,
-    Brand,
-    Colors,
-    FontSizes,
-    Spacing,
+  BorderRadius,
+  Brand,
+  Colors,
+  FontSizes,
+  Spacing,
 } from "@/constants/theme";
 import { useReminders } from "@/context/RemindersContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { scheduleNotification } from "@/services/notifee";
 import {
-    CustomRecurrencePreset,
-    DEFAULT_SNOOZE_PRESETS,
-    RecurrenceType,
+  CustomRecurrencePreset,
+  DEFAULT_SNOOZE_PRESETS,
+  RecurrenceType,
 } from "@/types/reminder";
 
 const RECURRENCE_OPTIONS: {
@@ -78,7 +78,9 @@ export default function AddReminderModal() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? "dark";
   const colors = Colors[colorScheme];
-  const { addReminder, preferences, updatePreferences } = useReminders();
+  const insets = useSafeAreaInsets();
+  const { addReminder, preferences, updatePreferences, featureAccess } =
+    useReminders();
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -170,6 +172,29 @@ export default function AddReminderModal() {
 
       router.back();
     } catch (error) {
+      const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+      if (message === "LIMIT_REACHED") {
+        Alert.alert(
+          "Upgrade to Pro",
+          "Free plan allows up to 10 reminders. Upgrade to create unlimited reminders.",
+          [
+            { text: "Not Now", style: "cancel" },
+            { text: "View Plans", onPress: () => router.push("/paywall") },
+          ],
+        );
+        return;
+      }
+      if (message === "PRO_REQUIRED") {
+        Alert.alert(
+          "Verso Pro Required",
+          "Custom repeats are a Pro feature. Upgrade to unlock them.",
+          [
+            { text: "Not Now", style: "cancel" },
+            { text: "View Plans", onPress: () => router.push("/paywall") },
+          ],
+        );
+        return;
+      }
       console.error("Error saving reminder:", error);
       Alert.alert("Error", "Failed to save reminder. Please try again.");
     } finally {
@@ -184,6 +209,17 @@ export default function AddReminderModal() {
   };
 
   const handleSelectCustomPreset = (preset: CustomRecurrencePreset) => {
+    if (!featureAccess.unlimitedRecurrence) {
+      Alert.alert(
+        "Verso Pro Required",
+        "Custom repeats are a Pro feature. Upgrade to unlock them.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "View Plans", onPress: () => router.push("/paywall") },
+        ],
+      );
+      return;
+    }
     Haptics.selectionAsync();
     setRecurrence(preset.type);
     setRecurrenceInterval(preset.interval);
@@ -197,6 +233,17 @@ export default function AddReminderModal() {
   };
 
   const handleDeleteCustomPreset = (preset: CustomRecurrencePreset) => {
+    if (!featureAccess.unlimitedRecurrence) {
+      Alert.alert(
+        "Verso Pro Required",
+        "Custom repeats are a Pro feature. Upgrade to unlock them.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "View Plans", onPress: () => router.push("/paywall") },
+        ],
+      );
+      return;
+    }
     Alert.alert(
       "Delete Preset",
       `Are you sure you want to delete "${preset.label}"?`,
@@ -217,6 +264,17 @@ export default function AddReminderModal() {
   };
 
   const handleAddCustomRecurrence = async () => {
+    if (!featureAccess.unlimitedRecurrence) {
+      Alert.alert(
+        "Verso Pro Required",
+        "Custom repeats are a Pro feature. Upgrade to unlock them.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "View Plans", onPress: () => router.push("/paywall") },
+        ],
+      );
+      return;
+    }
     if (!customRecurrenceLabel.trim()) {
       Alert.alert("Missing Label", "Please enter a label for this preset.");
       return;
@@ -284,441 +342,460 @@ export default function AddReminderModal() {
   };
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      edges={["bottom"]}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Title Input */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                Title
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.titleInput,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    color: colors.text,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                placeholder="What do you need to remember?"
-                placeholderTextColor={colors.textMuted}
-                value={title}
-                onChangeText={setTitle}
-                autoFocus
-                maxLength={100}
-              />
-            </View>
+          {/* Title Input */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Title
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                styles.titleInput,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  color: colors.text,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              placeholder="What do you need to remember?"
+              placeholderTextColor={colors.textMuted}
+              value={title}
+              onChangeText={setTitle}
+              autoFocus
+              maxLength={100}
+            />
+          </View>
 
-            {/* Notes Input */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                Notes (optional)
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.notesInput,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    color: colors.text,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                placeholder="Add any additional details..."
-                placeholderTextColor={colors.textMuted}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
+          {/* Notes Input */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Notes (optional)
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                styles.notesInput,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  color: colors.text,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              placeholder="Add any additional details..."
+              placeholderTextColor={colors.textMuted}
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </View>
 
-            {/* Quick Time Buttons */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                Quick Set
-              </Text>
-              <View style={styles.quickTimeRow}>
-                {QUICK_TIMES.map((option) => {
-                  const isSelected = selectedQuickTime === option.label;
-                  return (
-                    <Pressable
-                      key={option.label}
+          {/* Quick Time Buttons */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Quick Set
+            </Text>
+            <View style={styles.quickTimeRow}>
+              {QUICK_TIMES.map((option) => {
+                const isSelected = selectedQuickTime === option.label;
+                return (
+                  <Pressable
+                    key={option.label}
+                    style={[
+                      styles.quickTimeButton,
+                      {
+                        backgroundColor: isSelected
+                          ? Brand.primary
+                          : colors.backgroundSecondary,
+                        borderColor: isSelected
+                          ? Brand.primary
+                          : colors.cardBorder,
+                      },
+                    ]}
+                    onPress={() =>
+                      handleQuickTime(option.label, option.getDate)
+                    }
+                  >
+                    <Text
                       style={[
-                        styles.quickTimeButton,
-                        {
-                          backgroundColor: isSelected
-                            ? Brand.primary
-                            : colors.backgroundSecondary,
-                          borderColor: isSelected
-                            ? Brand.primary
-                            : colors.cardBorder,
-                        },
+                        styles.quickTimeText,
+                        { color: isSelected ? "#fff" : colors.text },
                       ]}
-                      onPress={() =>
-                        handleQuickTime(option.label, option.getDate)
-                      }
                     >
-                      <Text
-                        style={[
-                          styles.quickTimeText,
-                          { color: isSelected ? "#fff" : colors.text },
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
+          </View>
 
-            {/* Date & Time Pickers */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                Date & Time
+          {/* Date & Time Pickers */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Date & Time
+            </Text>
+
+            {/* Date Picker Button */}
+            <Pressable
+              style={[
+                styles.dateTimeCard,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar" size={22} color={Brand.primary} />
+              <Text style={[styles.dateTimeValue, { color: colors.text }]}>
+                {format(datetime, "EEEE, MMMM d, yyyy")}
               </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textMuted}
+              />
+            </Pressable>
 
-              {/* Date Picker Button */}
-              <Pressable
+            {/* Time Picker Button */}
+            <Pressable
+              style={[
+                styles.dateTimeCard,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: isInPast ? Brand.error : colors.cardBorder,
+                },
+              ]}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Ionicons
+                name="time"
+                size={22}
+                color={isInPast ? Brand.error : Brand.secondary}
+              />
+              <Text
                 style={[
-                  styles.dateTimeCard,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.cardBorder,
-                  },
+                  styles.dateTimeValue,
+                  { color: isInPast ? Brand.error : colors.text },
                 ]}
-                onPress={() => setShowDatePicker(true)}
               >
-                <Ionicons name="calendar" size={22} color={Brand.primary} />
-                <Text style={[styles.dateTimeValue, { color: colors.text }]}>
-                  {format(datetime, "EEEE, MMMM d, yyyy")}
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={colors.textMuted}
-                />
-              </Pressable>
+                {format(datetime, "h:mm a")}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textMuted}
+              />
+            </Pressable>
 
-              {/* Time Picker Button */}
-              <Pressable
-                style={[
-                  styles.dateTimeCard,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: isInPast ? Brand.error : colors.cardBorder,
-                  },
-                ]}
-                onPress={() => setShowTimePicker(true)}
-              >
-                <Ionicons
-                  name="time"
-                  size={22}
-                  color={isInPast ? Brand.error : Brand.secondary}
-                />
-                <Text
-                  style={[
-                    styles.dateTimeValue,
-                    { color: isInPast ? Brand.error : colors.text },
-                  ]}
-                >
-                  {format(datetime, "h:mm a")}
-                </Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={20}
-                  color={colors.textMuted}
-                />
-              </Pressable>
+            {isInPast && (
+              <Text style={[styles.pastWarning, { color: Brand.error }]}>
+                ⚠️ Please select a time in the future
+              </Text>
+            )}
 
-              {isInPast && (
-                <Text style={[styles.pastWarning, { color: Brand.error }]}>
-                  ⚠️ Please select a time in the future
-                </Text>
-              )}
-
-              {/* iOS Date Picker (inline) */}
-              {Platform.OS === "ios" && showDatePicker && (
-                <View style={styles.pickerContainer}>
-                  <DateTimePicker
-                    value={datetime}
-                    mode="date"
-                    display="spinner"
-                    onChange={onDateChange}
-                    minimumDate={new Date()}
-                    themeVariant={colorScheme}
-                  />
-                  <Pressable
-                    style={[
-                      styles.pickerDone,
-                      { backgroundColor: Brand.primary },
-                    ]}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={styles.pickerDoneText}>Done</Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {/* iOS Time Picker (inline) */}
-              {Platform.OS === "ios" && showTimePicker && (
-                <View style={styles.pickerContainer}>
-                  <DateTimePicker
-                    value={datetime}
-                    mode="time"
-                    display="spinner"
-                    onChange={onTimeChange}
-                    themeVariant={colorScheme}
-                  />
-                  <Pressable
-                    style={[
-                      styles.pickerDone,
-                      { backgroundColor: Brand.primary },
-                    ]}
-                    onPress={() => setShowTimePicker(false)}
-                  >
-                    <Text style={styles.pickerDoneText}>Done</Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {/* Android Date Picker (modal) */}
-              {Platform.OS === "android" && showDatePicker && (
+            {/* iOS Date Picker (inline) */}
+            {Platform.OS === "ios" && showDatePicker && (
+              <View style={styles.pickerContainer}>
                 <DateTimePicker
                   value={datetime}
                   mode="date"
-                  display="default"
+                  display="spinner"
                   onChange={onDateChange}
                   minimumDate={new Date()}
+                  themeVariant={colorScheme}
                 />
-              )}
+                <Pressable
+                  style={[
+                    styles.pickerDone,
+                    { backgroundColor: Brand.primary },
+                  ]}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </Pressable>
+              </View>
+            )}
 
-              {/* Android Time Picker (modal) */}
-              {Platform.OS === "android" && showTimePicker && (
+            {/* iOS Time Picker (inline) */}
+            {Platform.OS === "ios" && showTimePicker && (
+              <View style={styles.pickerContainer}>
                 <DateTimePicker
                   value={datetime}
                   mode="time"
-                  display="default"
+                  display="spinner"
                   onChange={onTimeChange}
+                  themeVariant={colorScheme}
                 />
-              )}
-            </View>
-
-            {/* Recurrence */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                Repeat
-              </Text>
-              <View style={styles.recurrenceRow}>
-                {RECURRENCE_OPTIONS.map((option) => {
-                  const isSelected =
-                    recurrence === option.value && recurrenceInterval === 1;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      style={[
-                        styles.recurrenceButton,
-                        {
-                          backgroundColor: isSelected
-                            ? Brand.primary
-                            : colors.backgroundSecondary,
-                          borderColor: isSelected
-                            ? Brand.primary
-                            : colors.cardBorder,
-                        },
-                      ]}
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        setRecurrence(option.value);
-                        setRecurrenceInterval(1);
-                      }}
-                    >
-                      <Ionicons
-                        name={option.icon}
-                        size={18}
-                        color={isSelected ? "#fff" : colors.textMuted}
-                      />
-                      <Text
-                        style={[
-                          styles.recurrenceText,
-                          {
-                            color: isSelected ? "#fff" : colors.text,
-                          },
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Custom Recurrence Presets - Top 5 most used */}
-              {topCustomPresets.length > 0 && (
-                <View
+                <Pressable
                   style={[
-                    styles.customPresetsSection,
-                    { marginTop: Spacing.sm },
+                    styles.pickerDone,
+                    { backgroundColor: Brand.primary },
                   ]}
+                  onPress={() => setShowTimePicker(false)}
                 >
-                  <Text style={[styles.sublabel, { color: colors.textMuted }]}>
-                    Your Presets
-                  </Text>
-                  <View style={styles.recurrenceRow}>
-                    {topCustomPresets.map((preset) => {
-                      const isSelected =
-                        recurrence === preset.type &&
-                        recurrenceInterval === preset.interval;
-                      return (
-                        <Pressable
-                          key={preset.id}
-                          style={[
-                            styles.recurrenceButton,
-                            {
-                              backgroundColor: isSelected
-                                ? Brand.secondary
-                                : colors.backgroundSecondary,
-                              borderColor: isSelected
-                                ? Brand.secondary
-                                : colors.cardBorder,
-                            },
-                          ]}
-                          onPress={() => handleSelectCustomPreset(preset)}
-                          onLongPress={() => handleDeleteCustomPreset(preset)}
-                        >
-                          <Ionicons
-                            name="repeat"
-                            size={18}
-                            color={isSelected ? "#fff" : colors.textMuted}
-                          />
-                          <Text
-                            style={[
-                              styles.recurrenceText,
-                              { color: isSelected ? "#fff" : colors.text },
-                            ]}
-                          >
-                            {preset.label}
-                          </Text>
-                          <Ionicons
-                            name="close-circle"
-                            size={16}
-                            color={isSelected ? "#fff" : colors.textMuted}
-                            style={{ marginLeft: 4 }}
-                          />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </Pressable>
+              </View>
+            )}
 
-              {/* Add Custom Button */}
-              <Pressable
-                style={[
-                  styles.addCustomButton,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.cardBorder,
-                  },
-                ]}
-                onPress={() => setShowCustomRecurrenceModal(true)}
-              >
-                <Ionicons
-                  name="add-circle-outline"
-                  size={18}
-                  color={Brand.primary}
-                />
-                <Text style={[styles.addCustomText, { color: Brand.primary }]}>
-                  Add Custom Repeat
-                </Text>
-              </Pressable>
-            </View>
+            {/* Android Date Picker (modal) */}
+            {Platform.OS === "android" && showDatePicker && (
+              <DateTimePicker
+                value={datetime}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+                minimumDate={new Date()}
+              />
+            )}
 
-            {/* Priority */}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
-                Priority
-              </Text>
-              <View style={styles.priorityRow}>
-                {PRIORITY_OPTIONS.map((option) => (
+            {/* Android Time Picker (modal) */}
+            {Platform.OS === "android" && showTimePicker && (
+              <DateTimePicker
+                value={datetime}
+                mode="time"
+                display="default"
+                onChange={onTimeChange}
+              />
+            )}
+          </View>
+
+          {/* Recurrence */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Repeat
+            </Text>
+            <View style={styles.recurrenceRow}>
+              {RECURRENCE_OPTIONS.map((option) => {
+                const isSelected =
+                  recurrence === option.value && recurrenceInterval === 1;
+                return (
                   <Pressable
                     key={option.value}
                     style={[
-                      styles.priorityButton,
+                      styles.recurrenceButton,
                       {
-                        backgroundColor:
-                          priority === option.value
-                            ? option.color
-                            : colors.backgroundSecondary,
-                        borderColor:
-                          priority === option.value
-                            ? option.color
-                            : colors.cardBorder,
+                        backgroundColor: isSelected
+                          ? Brand.primary
+                          : colors.backgroundSecondary,
+                        borderColor: isSelected
+                          ? Brand.primary
+                          : colors.cardBorder,
                       },
                     ]}
                     onPress={() => {
                       Haptics.selectionAsync();
-                      setPriority(option.value);
+                      setRecurrence(option.value);
+                      setRecurrenceInterval(1);
                     }}
                   >
+                    <Ionicons
+                      name={option.icon}
+                      size={18}
+                      color={isSelected ? "#fff" : colors.textMuted}
+                    />
                     <Text
                       style={[
-                        styles.priorityText,
+                        styles.recurrenceText,
                         {
-                          color:
-                            priority === option.value ? "#fff" : colors.text,
+                          color: isSelected ? "#fff" : colors.text,
                         },
                       ]}
                     >
                       {option.label}
                     </Text>
                   </Pressable>
-                ))}
-              </View>
+                );
+              })}
             </View>
-          </ScrollView>
 
-          {/* Save Button */}
-          <View style={styles.footer}>
+            {/* Custom Recurrence Presets - Top 5 most used */}
+            {topCustomPresets.length > 0 && (
+              <View
+                style={[styles.customPresetsSection, { marginTop: Spacing.sm }]}
+              >
+                <Text style={[styles.sublabel, { color: colors.textMuted }]}>
+                  Your Presets
+                </Text>
+                <View style={styles.recurrenceRow}>
+                  {topCustomPresets.map((preset) => {
+                    const isSelected =
+                      recurrence === preset.type &&
+                      recurrenceInterval === preset.interval;
+                    return (
+                      <Pressable
+                        key={preset.id}
+                        style={[
+                          styles.recurrenceButton,
+                          {
+                            backgroundColor: isSelected
+                              ? Brand.secondary
+                              : colors.backgroundSecondary,
+                            borderColor: isSelected
+                              ? Brand.secondary
+                              : colors.cardBorder,
+                          },
+                        ]}
+                        onPress={() => handleSelectCustomPreset(preset)}
+                        onLongPress={() => handleDeleteCustomPreset(preset)}
+                      >
+                        <Ionicons
+                          name="repeat"
+                          size={18}
+                          color={isSelected ? "#fff" : colors.textMuted}
+                        />
+                        <Text
+                          style={[
+                            styles.recurrenceText,
+                            { color: isSelected ? "#fff" : colors.text },
+                          ]}
+                        >
+                          {preset.label}
+                        </Text>
+                        <Ionicons
+                          name="close-circle"
+                          size={16}
+                          color={isSelected ? "#fff" : colors.textMuted}
+                          style={{ marginLeft: 4 }}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Add Custom Button */}
             <Pressable
               style={[
-                styles.saveButton,
+                styles.addCustomButton,
                 {
-                  backgroundColor:
-                    title.trim() && !isInPast
-                      ? Brand.primary
-                      : colors.backgroundTertiary,
-                  opacity: title.trim() && !isInPast ? 1 : 0.5,
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: colors.cardBorder,
                 },
               ]}
-              onPress={handleSave}
-              disabled={!title.trim() || isInPast || isSaving}
+              onPress={() => {
+                if (!featureAccess.unlimitedRecurrence) {
+                  Alert.alert(
+                    "Verso Pro Required",
+                    "Custom repeats are a Pro feature. Upgrade to unlock them.",
+                    [
+                      { text: "Not Now", style: "cancel" },
+                      {
+                        text: "View Plans",
+                        onPress: () => router.push("/paywall"),
+                      },
+                    ],
+                  );
+                  return;
+                }
+                setShowCustomRecurrenceModal(true);
+              }}
             >
-              <Ionicons name="checkmark" size={22} color="#fff" />
-              <Text style={styles.saveButtonText}>
-                {isSaving ? "Saving..." : "Save Reminder"}
+              <Ionicons
+                name={
+                  featureAccess.unlimitedRecurrence
+                    ? "add-circle-outline"
+                    : "lock-closed-outline"
+                }
+                size={18}
+                color={Brand.primary}
+              />
+              <Text style={[styles.addCustomText, { color: Brand.primary }]}>
+                {featureAccess.unlimitedRecurrence
+                  ? "Add Custom Repeat"
+                  : "Custom Repeat (Pro)"}
               </Text>
             </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      </TouchableWithoutFeedback>
+
+          {/* Priority */}
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.textMuted }]}>
+              Priority
+            </Text>
+            <View style={styles.priorityRow}>
+              {PRIORITY_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  style={[
+                    styles.priorityButton,
+                    {
+                      backgroundColor:
+                        priority === option.value
+                          ? option.color
+                          : colors.backgroundSecondary,
+                      borderColor:
+                        priority === option.value
+                          ? option.color
+                          : colors.cardBorder,
+                    },
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPriority(option.value);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.priorityText,
+                      {
+                        color: priority === option.value ? "#fff" : colors.text,
+                      },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Save Button */}
+        <View
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom, Spacing.lg) },
+          ]}
+        >
+          <Pressable
+            style={[
+              styles.saveButton,
+              {
+                backgroundColor:
+                  title.trim() && !isInPast
+                    ? Brand.primary
+                    : colors.backgroundTertiary,
+                opacity: title.trim() && !isInPast ? 1 : 0.5,
+              },
+            ]}
+            onPress={handleSave}
+            disabled={!title.trim() || isInPast || isSaving}
+          >
+            <Ionicons name="checkmark" size={22} color="#fff" />
+            <Text style={styles.saveButtonText}>
+              {isSaving ? "Saving..." : "Save Reminder"}
+            </Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
 
       {/* Custom Recurrence Modal */}
       <Modal
@@ -903,7 +980,7 @@ export default function AddReminderModal() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -948,15 +1025,17 @@ const styles = StyleSheet.create({
   },
   quickTimeButton: {
     flex: 1,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     alignItems: "center",
+    justifyContent: "center",
   },
   quickTimeText: {
-    fontSize: FontSizes.xs,
-    fontWeight: "500",
+    fontSize: FontSizes.sm,
+    fontWeight: "600",
+    textAlign: "center",
   },
   dateTimeCard: {
     flexDirection: "row",
@@ -1025,6 +1104,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
   saveButton: {
     flexDirection: "row",
